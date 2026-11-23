@@ -1,0 +1,431 @@
+{
+  "id": "SindicoIaAtend01",
+  "name": "Síndico IA — 1. Atendimento de mensagens",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sindico",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "23cf21c7-7ecf-4a62-b66e-a4bf74ea0428",
+      "name": "Webhook - Mensagem do morador",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "0a937d81-e53e-4299-b632-bd9ebc8897ce"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fab1ecbc-7f8f-418a-a05d-d81a96653738",
+              "name": "texto",
+              "value": "={{ $json.body.texto }}",
+              "type": "string"
+            },
+            {
+              "id": "c5e1d3e2-c716-44aa-95e6-5cd42f2db79e",
+              "name": "morador",
+              "value": "={{ $json.body.morador || 'Morador' }}",
+              "type": "string"
+            },
+            {
+              "id": "a4fdda31-35b0-4b22-9a57-e1760738655c",
+              "name": "apartamento",
+              "value": "={{ $json.body.apartamento || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "d6179c9d-ec11-4d68-8889-d1d3fcecbecf",
+              "name": "canal",
+              "value": "={{ $json.body.canal || 'webhook' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "151aee62-0ce5-497d-9031-2b733baaac00",
+      "name": "Edit Fields - Normalizar entrada",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/mensagens",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ texto: $json.texto, morador: $json.morador, apartamento: $json.apartamento || null, canal: $json.canal }) }}"
+      },
+      "id": "794d7c8b-3eb4-4541-9b56-24a214bcdec0",
+      "name": "HTTP Request - Analisar com IA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "af81d2b8-8f89-4a12-a9ea-905f9049ed07",
+                    "leftValue": "={{ $json.acao }}",
+                    "rightValue": "emergencia",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Emergência"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "0f6b162d-7ed2-4541-8795-de47a8bfe6ac",
+                    "leftValue": "={{ $json.acao }}",
+                    "rightValue": "abrir_chamado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Abrir chamado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "be911312-b3b8-4c02-a4d7-b72bac193aa6",
+                    "leftValue": "={{ $json.acao }}",
+                    "rightValue": "responder_automaticamente",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Resposta automática"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "768c2b82-3089-476e-ad97-3762860af470",
+      "name": "Switch - Decidir ação",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1ddf2ced-1c56-4f1b-9a27-84a40637247a",
+              "name": "destino",
+              "value": "portaria + zelador de plantão + síndico",
+              "type": "string"
+            },
+            {
+              "id": "5bd58436-9446-4ab3-b1de-425c82ad3a89",
+              "name": "alerta",
+              "value": "={{ '🚨 EMERGÊNCIA\\n' + $json.notificacao_setor }}",
+              "type": "string"
+            },
+            {
+              "id": "0be0def5-f139-4b54-900f-ba3d1edfed0c",
+              "name": "resposta_morador",
+              "value": "={{ $json.resposta_morador }}",
+              "type": "string"
+            },
+            {
+              "id": "e085bdda-73dc-46ad-8268-e97487af7752",
+              "name": "chamado_id",
+              "value": "={{ $json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "efe69d61-0b81-4e0e-aaef-767ad6cfaa5d",
+              "name": "prioridade",
+              "value": "={{ $json.prioridade }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7fd61da9-3fe4-4268-8324-99a61b27152d",
+      "name": "Emergência - Alertar portaria e zelador",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        900,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d26b39b7-517d-4486-b9c9-b1f838e3d164",
+              "name": "destino",
+              "value": "={{ $json.setor }}",
+              "type": "string"
+            },
+            {
+              "id": "befd5424-b2e7-4f22-af30-0591d52f3111",
+              "name": "alerta",
+              "value": "={{ $json.notificacao_setor }}",
+              "type": "string"
+            },
+            {
+              "id": "585f40cf-236b-4f04-a351-8c4dbdd64f59",
+              "name": "resposta_morador",
+              "value": "={{ $json.resposta_morador }}",
+              "type": "string"
+            },
+            {
+              "id": "4b020de2-0fb6-4b49-86ac-7ac284430827",
+              "name": "chamado_id",
+              "value": "={{ $json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "c1155200-94de-4c81-a209-d54bb01d342c",
+              "name": "prioridade",
+              "value": "={{ $json.prioridade }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4025748c-f1e5-4772-8c75-94e490fe3492",
+      "name": "Chamado - Encaminhar ao setor",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1410df74-c236-4293-b292-97cf29c6910e",
+              "name": "destino",
+              "value": "morador",
+              "type": "string"
+            },
+            {
+              "id": "46d02406-2eeb-444d-9574-c30e169651f0",
+              "name": "alerta",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "d3fcfc83-6e90-4d30-9e71-7efa22e3eec9",
+              "name": "resposta_morador",
+              "value": "={{ $json.resposta_morador }}",
+              "type": "string"
+            },
+            {
+              "id": "314e087a-07e5-4af7-a5a4-ef3e287a786a",
+              "name": "trecho_regimento",
+              "value": "={{ $json.analise.trecho_regimento }}",
+              "type": "string"
+            },
+            {
+              "id": "1413a200-bec0-4e37-b112-4b258b91ce2b",
+              "name": "chamado_id",
+              "value": "={{ $json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "02c927d4-ff1d-4c18-9664-b3a85020011c",
+              "name": "prioridade",
+              "value": "={{ $json.prioridade }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "580b5383-107a-4061-83c7-2c77f00ba5e0",
+      "name": "Resposta automática - Regimento",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        900,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "4f042cfe-3547-499d-b364-a1457eeb738a",
+      "name": "Respond to Webhook - Devolver ao morador",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Mensagem do morador": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields - Normalizar entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields - Normalizar entrada": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Analisar com IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Analisar com IA": {
+      "main": [
+        [
+          {
+            "node": "Switch - Decidir ação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Decidir ação": {
+      "main": [
+        [
+          {
+            "node": "Emergência - Alertar portaria e zelador",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chamado - Encaminhar ao setor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resposta automática - Regimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emergência - Alertar portaria e zelador": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - Devolver ao morador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chamado - Encaminhar ao setor": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - Devolver ao morador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resposta automática - Regimento": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - Devolver ao morador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

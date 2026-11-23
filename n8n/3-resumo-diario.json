@@ -1,0 +1,123 @@
+{
+  "id": "SindicoIaResum03",
+  "name": "Síndico IA — 3. Resumo diário para o síndico",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "id": "b6b32f93-d3b9-4d7e-920d-7ac5fabec878",
+      "name": "Schedule - Todo dia às 18h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "d5732c0e-8d99-4898-8570-8775f9818970",
+      "name": "Executar manualmente (teste)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://api:8000/resumo-diario",
+        "options": {}
+      },
+      "id": "cec86aab-cfc6-452d-8a92-19e1cacc16d9",
+      "name": "HTTP Request - Resumo do dia (IA)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d5c12dfd-3af2-4466-a010-86d5b59d014c",
+              "name": "destino",
+              "value": "síndico",
+              "type": "string"
+            },
+            {
+              "id": "a29033f7-722f-4ef9-b5d2-124ae2ebdc03",
+              "name": "relatorio",
+              "value": "={{ '📋 Resumo de ' + $json.data + '\\n' + $json.total_chamados + ' chamados | ' + $json.pendencias_criticas + ' críticos pendentes\\n\\n' + $json.resumo + '\\n\\n• ' + $json.destaques.join('\\n• ') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5fcd7af3-8a57-4c68-b205-c52aac93ef8f",
+      "name": "Edit Fields - Relatório do síndico",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule - Todo dia às 18h": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Resumo do dia (IA)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar manualmente (teste)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Resumo do dia (IA)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Resumo do dia (IA)": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields - Relatório do síndico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

@@ -1,0 +1,9 @@
+[
+  {"texto": "Socorro, tem cheiro de gás forte no corredor do 3º andar!", "morador": "Ana Souza", "apartamento": "302B"},
+  {"texto": "Tem água vazando do teto da garagem, perto da vaga 12", "morador": "Carlos Lima", "apartamento": "104A"},
+  {"texto": "Posso fazer mudança no domingo?", "morador": "Juliana Reis", "apartamento": "701B"},
+  {"texto": "Qual o horário da piscina?", "morador": "Pedro Alves", "apartamento": "205A"},
+  {"texto": "O vizinho do 402 está com som altíssimo de novo, já passou da meia-noite!!", "morador": "Marta Dias", "apartamento": "302A"},
+  {"texto": "Meu boleto veio com valor errado, cobraram a taxa do salão duas vezes", "morador": "Rafael Nunes", "apartamento": "508B"},
+  {"texto": "Chegou alguma encomenda no meu nome?", "morador": "Bianca Costa", "apartamento": "110A"}
+]

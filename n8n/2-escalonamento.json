@@ -1,0 +1,178 @@
+{
+  "id": "SindicoIaEscal02",
+  "name": "Síndico IA — 2. Escalonamento de emergências",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "a02eb86a-0d8f-4234-86a8-ed1418d4e7a9",
+      "name": "Schedule - A cada 10 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "d1d50755-7fe1-452f-b387-d7115e4afc60",
+      "name": "Executar manualmente (teste)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://api:8000/chamados/criticos-parados",
+        "options": {},
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minutos",
+              "value": "30"
+            }
+          ]
+        }
+      },
+      "id": "f1448b92-a8d6-4170-b110-745d7a68e871",
+      "name": "HTTP Request - Críticos parados",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "7640169f-7cf6-4a39-a1c4-bfe1943d3c18",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a2422aef-4ec7-4c48-b886-db49029df123",
+      "name": "If - Existe chamado parado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3150f5d8-5097-49dc-9860-1f002a2c3f0a",
+              "name": "destino",
+              "value": "síndico",
+              "type": "string"
+            },
+            {
+              "id": "d12c012b-44d2-450d-9372-41d1f3155b92",
+              "name": "alerta",
+              "value": "={{ '⏰ Chamado crítico #' + $json.id + ' está sem atendimento há mais de 30 min: ' + $json.analise.resumo }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0f339e39-ce0b-4af4-9b1e-8239ccb00f3d",
+      "name": "Edit Fields - Alerta ao síndico",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        660,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule - A cada 10 minutos": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Críticos parados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar manualmente (teste)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Críticos parados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Críticos parados": {
+      "main": [
+        [
+          {
+            "node": "If - Existe chamado parado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If - Existe chamado parado?": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields - Alerta ao síndico",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
