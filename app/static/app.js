@@ -51,6 +51,8 @@ const estado = {
 };
 
 // ------------------------------------------------------------------ utilidades
+const ico = (nome) => `<svg class="ico" aria-hidden="true" focusable="false"><use href="#i-${nome}"/></svg>`;
+
 function esc(t) { const d = document.createElement("div"); d.textContent = t ?? ""; return d.innerHTML; }
 const autor = () => $("#atuando").value;
 
@@ -100,6 +102,21 @@ function avisar(texto) {
 }
 
 // ------------------------------------------------------------------ caixas e indicadores
+const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+
+// Os números do condomínio contados em uma frase, como o síndico contaria
+function situacao(m, pendentes, atrasados) {
+  if (!m.total) return "Nenhuma mensagem recebida ainda.";
+  const semIa = m.chamadas_ia_economizadas ?? 0;
+  const partes = [`${plural(m.total, "mensagem recebida", "mensagens recebidas")}.`];
+  if (semIa) partes.push(`${semIa === 1 ? "Uma foi respondida" : `${semIa} foram respondidas`} sem usar a IA (${m.percentual_sem_ia}%).`);
+  partes.push(pendentes ? `${plural(pendentes, "chamado espera", "chamados esperam")} atendimento${atrasados ? `, ${plural(atrasados, "fora", "fora")} do prazo` : ""}.` : "Nada esperando atendimento.");
+  if (m.tempo_medio_resolucao_min != null) {
+    const t = m.tempo_medio_resolucao_min < 1 ? "menos de 1 minuto" : duracao(m.tempo_medio_resolucao_min);
+    partes.push(`A equipe leva em média ${t} para resolver.`);
+  }
+  return partes.join(" ");
+}
 async function carregarCaixas() {
   const [caixas, m] = await Promise.all([api("/caixas"), api("/metricas")]);
   const pendTotal = Object.values(caixas).reduce((s, c) => s + c.pendentes, 0);
@@ -113,9 +130,7 @@ async function carregarCaixas() {
       <span class="contador${atras ? " alerta" : ""}"><span class="sr-only">, </span>${pend}<span class="sr-only"> pendentes</span></span>
     </button></li>`).join("");
 
-  $("#i-sem-ia").textContent = `${m.percentual_sem_ia ?? 0}%`;
-  $("#i-tempo").textContent = m.tempo_medio_resolucao_min == null ? "–" : duracao(m.tempo_medio_resolucao_min);
-  $("#i-total").textContent = m.total;
+  $("#situacao").innerHTML = situacao(m, pendTotal, atrasTotal);
 }
 
 $("#lista-caixas").addEventListener("click", (e) => {
@@ -292,27 +307,28 @@ function eventoHtml(e, c) {
         d.sentimento ? `Tom da mensagem: ${esc(d.sentimento)}.` : "",
         d.guarda_corpo ? "<strong>Regra de segurança aplicada:</strong> palavras de emergência forçaram a prioridade crítica." : "",
       ].filter(Boolean).join(" ");
-      return `<div class="ev ev-sistema ev-analise"><span class="icone" aria-hidden="true">✦</span>
-        <div><strong>${esc(e.texto)}</strong><br>${extras}
+      return registro(h, "analise", `<strong>${esc(e.texto)}</strong> ${extras}
         ${d.transcricao_anexo ? `<div class="trecho">Anexo: ${esc(d.transcricao_anexo)}</div>` : ""}
-        ${(d.fontes || []).length ? `<div class="trecho">Base usada: ${esc(d.fontes.map((f) => f.pergunta).join("; "))}${d.trecho_regimento ? `<br>Regimento: “${esc(d.trecho_regimento)}”` : ""}</div>` : ""}</div>
-        <span class="ev-hora">${h}</span></div>`;
+        ${(d.fontes || []).length ? `<div class="trecho">Base usada: ${esc(d.fontes.map((f) => f.pergunta).join("; "))}${d.trecho_regimento ? `<br>Regimento: “${esc(d.trecho_regimento)}”` : ""}</div>` : ""}`, "ev-analise");
     }
     case "alerta_setor":
-      return `<div class="ev ev-sistema"><span class="icone" aria-hidden="true">🔔</span>
-        <div class="ev-alerta"><details><summary><strong>${esc(e.destino)}</strong> foi avisado pelo n8n</summary><pre>${esc(e.texto)}</pre></details></div>
-        <span class="ev-hora">${h}</span></div>`;
+      return registro(h, "sino", `<details><summary><strong>${esc(e.destino)}</strong> foi avisado pelo n8n</summary><pre>${esc(e.texto)}</pre></details>`, "ev-alerta");
     case "status": {
-      const icone = e.dados.para === "resolvido" ? "✓" : e.dados.para === "em_andamento" ? "▶" : "↺";
-      return `<div class="ev ev-sistema"><span class="icone" aria-hidden="true">${icone}</span><div>${esc(e.texto)}</div><span class="ev-hora">${h}</span></div>`;
+      const nome = e.dados.para === "resolvido" ? "resolvido" : e.dados.para === "em_andamento" && e.dados.de === "aberto" ? "assumir" : "reabrir";
+      return registro(h, nome, esc(e.texto), e.dados.para === "resolvido" ? "ev-ok" : "");
     }
     case "encaminhamento":
-      return `<div class="ev ev-sistema"><span class="icone" aria-hidden="true">⇄</span><div><strong>${esc(e.autor)}</strong>: ${esc(e.texto)}</div><span class="ev-hora">${h}</span></div>`;
+      return registro(h, "encaminhar", `<strong>${esc(e.autor)}</strong>: ${esc(e.texto)}`);
     case "prioridade":
-      return `<div class="ev ev-sistema"><span class="icone" aria-hidden="true">!</span><div><strong>${esc(e.autor)}</strong>: ${esc(e.texto)}</div><span class="ev-hora">${h}</span></div>`;
+      return registro(h, "prioridade", `<strong>${esc(e.autor)}</strong>: ${esc(e.texto)}`);
     default:
       return `<div class="ev ev-sistema"><div>${esc(e.texto)}</div></div>`;
   }
+}
+
+// Entrada do livro de ocorrências: horário, marca e texto, sem caixa em volta
+function registro(h, icone, html, classe = "") {
+  return `<div class="ev ev-sistema ${classe}"><time class="ev-hora">${h}</time><span class="marco">${ico(icone)}</span><div class="ev-texto">${html}</div></div>`;
 }
 
 function botoesHtml(c) {

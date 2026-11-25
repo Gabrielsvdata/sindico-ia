@@ -10,6 +10,17 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-analise" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5M8.5 11h5M11 8.5v5"/></symbol>
+      <symbol id="i-sino" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 8 2.5 8h-17S6 15 6 9"/><path d="M10.2 20.5a2 2 0 0 0 3.6 0"/></symbol>
+      <symbol id="i-assumir" viewBox="0 0 24 24"><circle cx="9" cy="7.5" r="3.5"/><path d="M2.5 20v-1.5A4.5 4.5 0 0 1 7 14h4"/><path d="m15 15.5 2.2 2.2 4.3-4.7"/></symbol>
+      <symbol id="i-resolvido" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.3 2.8 2.8L16.3 9"/></symbol>
+      <symbol id="i-reabrir" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.3"/><path d="M3.5 3.5v4.8h4.8"/></symbol>
+      <symbol id="i-encaminhar" viewBox="0 0 24 24"><path d="m16 3.5 4 4-4 4M20 7.5H4.5M8 20.5l-4-4 4-4M4 16.5h15.5"/></symbol>
+      <symbol id="i-prioridade" viewBox="0 0 24 24"><path d="M5 21V4M5 4h12.5l-2.5 4.5 2.5 4.5H5"/></symbol>
+    </defs>
+  </svg>
   <a class="pular" href="#lista">Pular para a fila de chamados</a>
   <header class="topo">
     <div class="marca">
@@ -37,10 +48,9 @@
     <!-- Caixas por setor e indicadores -->
     <nav class="caixas" aria-label="Caixas por setor">
       <ul id="lista-caixas"></ul>
-      <section class="indicadores" aria-label="Indicadores">
-        <div class="ind"><strong id="i-sem-ia">–</strong><span>respondidos sem IA</span></div>
-        <div class="ind"><strong id="i-tempo">–</strong><span>tempo médio para resolver</span></div>
-        <div class="ind"><strong id="i-total">–</strong><span>mensagens recebidas</span></div>
+      <section class="indicadores" aria-labelledby="t-situacao">
+        <h2 id="t-situacao">Situação</h2>
+        <p id="situacao">Carregando…</p>
         <button id="abrir-resumo" class="btn btn-contorno" type="button">Resumo do dia</button>
       </section>
     </nav>
