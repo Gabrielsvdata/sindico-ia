@@ -5,7 +5,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").lower()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 DATABASE_PATH = os.getenv("DATABASE_PATH", str(BASE_DIR / "sindico.db"))
 REGIMENTO_PATH = Path(os.getenv("REGIMENTO_PATH", str(BASE_DIR / "data" / "regimento.md")))
 
