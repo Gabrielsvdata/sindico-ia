@@ -46,7 +46,8 @@ const estado = {
   selecionado: null,
   chamados: [],
   idsVistos: null,
-  urlN8n: guardar.ler("urlN8n", null) || window.SINDICO_N8N_WEBHOOK_URL || null,
+  semN8n: Boolean(window.SINDICO_SEM_N8N),
+  urlN8n: guardar.ler("urlN8n", null),
   tipoComposicao: "resposta_morador",
 };
 
@@ -471,7 +472,7 @@ function abrirMudar(c, campo) {
 // O Render gratuito dorme sem uso. Acordar a API e o n8n juntos, assim que a central abre,
 // faz as duas esperas correrem em paralelo enquanto a pessoa ainda escreve a mensagem.
 function acordarServicos() {
-  if (estado.urlN8n) {
+  if (estado.urlN8n && !estado.semN8n) {
     try {
       const base = new URL(estado.urlN8n).origin;
       fetch(`${base}/healthz`, { mode: "no-cors", cache: "no-store" }).catch(() => {});
@@ -497,7 +498,7 @@ function abrirSimulador() {
 $("#abrir-simulador").addEventListener("click", abrirSimulador);
 $$("#simulador .chip").forEach((c) => c.addEventListener("click", () => { $("#texto").value = c.dataset.txt; $("#texto").focus(); }));
 $$('input[name="modo"]').forEach((r) => {
-  r.checked = r.value === guardar.ler("modo", "n8n");
+  r.checked = r.value === (estado.semN8n ? "api" : guardar.ler("modo", "n8n"));
   r.addEventListener("change", () => guardar.gravar("modo", r.value));
 });
 $("#trocar-url").addEventListener("click", () => {
@@ -620,7 +621,7 @@ async function verificarApi() {
     // Em produção, a API informa o endereço público do webhook do n8n
     // O endereço informado pela API (variável N8N_WEBHOOK_URL) vale mais que o padrão do config.js,
     // a não ser que a pessoa tenha salvo outro em "Endereço do n8n"
-    if (!guardar.ler("urlN8n", null) && h.n8n_webhook_url) estado.urlN8n = h.n8n_webhook_url;
+    if (!estado.semN8n && !guardar.ler("urlN8n", null) && h.n8n_webhook_url) estado.urlN8n = h.n8n_webhook_url;
     if (!estado.urlN8n) estado.urlN8n = "http://localhost:5678/webhook/sindico";
     el.className = "conexao ok";
     el.textContent = h.provedor_ia === "mock" ? "Online, IA simulada" : `Online, ${h.modelo}`;
@@ -647,6 +648,14 @@ async function atualizar({ rolar = false } = {}) {
   } catch (err) {
     console.error(err);
   }
+}
+
+// Versão online: sem n8n, o simulador envia direto para a API e explica o porquê
+if (estado.semN8n) {
+  $(".rota").innerHTML = `<legend>Caminho da mensagem</legend>
+    <p class="dica">Nesta versão online, a mensagem vai direto para a API, que analisa com IA e cria o chamado.
+    O fluxo do n8n (webhook, distribuição e avisos) roda na versão local com Docker; os prints dele estão no README do projeto.</p>
+    <input type="radio" name="modo" value="api" checked hidden>`;
 }
 
 acordarServicos();

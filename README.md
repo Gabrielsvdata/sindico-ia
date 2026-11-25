@@ -234,20 +234,24 @@ uvicorn app.main:app --reload
 
 Em outro terminal, rode o n8n com `npx n8n`, importe os fluxos e **troque a URL `http://api:8000` por `http://localhost:8000`** nos nodes HTTP Request.
 
-### Opção C — Produção no Render
+### Opção C — Versão online (Render + Vercel)
 
-O arquivo `render.yaml` cria dois serviços a partir deste repositório: a **API com a central** (`sindico-ia-api`) e o **n8n** (`sindico-ia-n8n`). O n8n usa `deploy/n8n.Dockerfile`, que já embute os fluxos da pasta `n8n/`. A cada inicialização, o script `deploy/n8n-iniciar.sh` importa os fluxos, troca `http://api:8000` pelo endereço público da API e publica o fluxo de atendimento.
+| Parte | Onde roda | Endereço |
+|---|---|---|
+| API + central | Render (plano gratuito) | `https://sindico-ia-api-u99t.onrender.com` |
+| Central (cópia estática, abre mais rápido) | Vercel | `https://sindico-ia-gabriels-projects-07a8013f.vercel.app` |
+| n8n | **Local, com docker-compose** | `http://localhost:5678` |
 
-1. No [Render](https://render.com), clique em **New → Blueprint** e escolha este repositório.
-2. Preencha as variáveis pedidas:
-   - `GEMINI_API_KEY`: sua chave do Gemini;
-   - `N8N_WEBHOOK_URL`: `https://sindico-ia-n8n.onrender.com/webhook/sindico`;
-   - `API_URL`: `https://sindico-ia-api.onrender.com`.
+**Por que o n8n não está online:** medimos o n8n 2.35 com a configuração mais enxuta possível (só os 8 nodes usados, sem o task runner) e ele precisa de cerca de **550 MB** de memória para subir. O plano gratuito do Render (e também o Starter) oferece 512 MB: o n8n caía com `JavaScript heap out of memory` e reiniciava em loop. Por isso, na versão online, o simulador envia as mensagens **direto para a API** (mesma análise com IA, mesmo RAG, mesmos chamados), e o fluxo do n8n roda na versão local, que é onde foram feitos os prints da seção 7. O arquivo `deploy/n8n.Dockerfile` já está pronto para publicar o n8n num serviço com 1 GB ou mais.
 
-   Se o Render der outro nome aos serviços, use os endereços que ele mostrar.
-3. Aguarde o deploy dos dois serviços e abra `https://sindico-ia-api.onrender.com`.
+**Como publicar a API no Render:**
+1. No [Render](https://render.com), clique em **New → Blueprint** e escolha este repositório (`render.yaml`).
+2. Preencha `GEMINI_API_KEY` com a sua chave.
+3. Se o Render der outro endereço à API, atualize `SINDICO_API_URL` em `app/static/config.js` (usado pela cópia na Vercel).
 
-**Limites do plano gratuito:** os serviços "dormem" após 15 minutos sem uso (o primeiro acesso leva cerca de 1 minuto), e o banco SQLite fica em `/tmp`, então os chamados somem quando o serviço reinicia. Para dados permanentes, use um plano pago com disco (`DATABASE_PATH` apontando para o disco). `AI_LIMITE_DIARIO=100` impede que alguém gaste toda a cota da sua chave enviando mensagens em massa.
+**Central na Vercel:** projeto com *Root Directory* `app/static`, sem framework (site estático). A API libera o acesso pelo navegador para os endereços `sindico-ia*.vercel.app` (`CORS_ORIGENS_REGEX`).
+
+**Limites do plano gratuito:** a API "dorme" após 15 minutos sem uso (a primeira chamada leva cerca de 1 minuto; a central avisa "Acordando o servidor"), e o banco SQLite fica em `/tmp`, então os chamados somem quando o serviço reinicia. `AI_LIMITE_DIARIO=100` protege a cota da chave.
 
 ### Testes automatizados
 
@@ -359,8 +363,8 @@ sindico-ia/
 ├── exemplos/            # Mensagens de exemplo + script de teste
 ├── docs/prints/         # Capturas de tela do n8n
 ├── tests/               # Testes da API (pytest) e da central no navegador (tests/e2e)
-├── deploy/              # Imagem do n8n e script de inicialização para o Render
-├── render.yaml          # Blueprint do Render (API + n8n)
+├── deploy/              # Imagem do n8n pronta para um servidor com 1 GB ou mais
+├── render.yaml          # Blueprint do Render (API + central)
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example

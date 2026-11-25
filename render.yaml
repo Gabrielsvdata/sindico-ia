@@ -1,4 +1,7 @@
-# Blueprint do Render: cria a API (com a central) e o n8n a partir deste repositório.
+# Blueprint do Render: cria a API (com a central) a partir deste repositório.
+# O n8n não está aqui: ele precisa de ~550 MB de memória e o plano do Render tem 512 MB
+# (medição no README). Para rodar o n8n, use o docker-compose ou um serviço com 1 GB ou mais
+# (deploy/n8n.Dockerfile já está pronto para isso).
 # No Render: New > Blueprint > escolha o repositório. Os valores marcados com sync: false
 # são pedidos na tela de criação.
 services:
@@ -29,27 +32,9 @@ services:
         value: "1"
       - key: AI_LIMITE_DIARIO
         value: "100"
-      - key: N8N_WEBHOOK_URL
-        sync: false            # ex.: https://sindico-ia-n8n.onrender.com/webhook/sindico
       - key: CORS_ORIGENS_REGEX
         value: ^https://sindico-ia[a-z0-9-]*\.vercel\.app$  # a central publicada na Vercel
       - key: DATABASE_PATH
         value: /tmp/sindico.db # plano gratuito: os dados somem quando o serviço reinicia
       - key: TZ
         value: America/Sao_Paulo
-
-  - type: web
-    name: sindico-ia-n8n
-    runtime: docker
-    plan: free
-    region: oregon
-    dockerfilePath: ./deploy/n8n.Dockerfile
-    dockerContext: .
-    healthCheckPath: /healthz
-    envVars:
-      - key: PORT
-        value: "5678"
-      - key: API_URL
-        sync: false            # o endereço da API que o Render mostrar (ex.: https://sindico-ia-api-u99t.onrender.com)
-      - key: N8N_ENCRYPTION_KEY
-        generateValue: true
