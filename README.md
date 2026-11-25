@@ -4,6 +4,8 @@
 
 Desafio Técnico KODIE: IA e Automação.
 
+📄 **Explicação completa da lógica:** [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md) · 🎬 **Roteiro do vídeo:** [docs/ROTEIRO-VIDEO.md](docs/ROTEIRO-VIDEO.md)
+
 ---
 
 ## 1. Apresentação da Ideia
