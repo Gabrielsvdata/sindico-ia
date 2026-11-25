@@ -50,6 +50,6 @@ services:
       - key: PORT
         value: "5678"
       - key: API_URL
-        sync: false            # ex.: https://sindico-ia-api.onrender.com
+        sync: false            # o endereço da API que o Render mostrar (ex.: https://sindico-ia-api-u99t.onrender.com)
       - key: N8N_ENCRYPTION_KEY
         generateValue: true

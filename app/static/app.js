@@ -618,7 +618,10 @@ async function verificarApi() {
     clearTimeout(acordando);
     const estavaFora = !el.classList.contains("ok");
     // Em produção, a API informa o endereço público do webhook do n8n
-    if (!estado.urlN8n) estado.urlN8n = h.n8n_webhook_url || "http://localhost:5678/webhook/sindico";
+    // O endereço informado pela API (variável N8N_WEBHOOK_URL) vale mais que o padrão do config.js,
+    // a não ser que a pessoa tenha salvo outro em "Endereço do n8n"
+    if (!guardar.ler("urlN8n", null) && h.n8n_webhook_url) estado.urlN8n = h.n8n_webhook_url;
+    if (!estado.urlN8n) estado.urlN8n = "http://localhost:5678/webhook/sindico";
     el.className = "conexao ok";
     el.textContent = h.provedor_ia === "mock" ? "Online, IA simulada" : `Online, ${h.modelo}`;
     el.removeAttribute("title");
