@@ -236,3 +236,11 @@ def test_reclamacoes_e_pedidos_vao_para_ia(texto):
 def test_perguntas_frequentes_reconhecidas(texto, esperado):
     from app.faq import buscar_faq
     assert buscar_faq(texto)["id"] == esperado
+
+
+def test_painel_e_servido(client):
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code in (302, 307) and r.headers["location"] == "/painel/"
+    pagina = client.get("/painel/")
+    assert pagina.status_code == 200 and "Síndico IA" in pagina.text
+    assert client.get("/painel/app.js").status_code == 200

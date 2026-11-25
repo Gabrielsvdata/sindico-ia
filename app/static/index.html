@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Síndico IA — Central do Condomínio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">
+      <span class="logo" aria-hidden="true">🏢</span>
+      <div>
+        <h1>Síndico IA</h1>
+        <p>Central de atendimento · Residencial Jardim das Palmeiras</p>
+      </div>
+    </div>
+    <div class="topo-acoes">
+      <span id="status-api" class="pill pill-neutro">Conectando…</span>
+      <a class="link-discreto" href="/docs" target="_blank" rel="noopener">API docs ↗</a>
+    </div>
+  </header>
+
+  <main class="grade">
+    <!-- Coluna esquerda: simulador do morador -->
+    <section class="cartao simulador" aria-labelledby="t-sim">
+      <div class="cartao-topo">
+        <h2 id="t-sim">Mensagem do morador</h2>
+        <div class="segmento" role="radiogroup" aria-label="Enviar por">
+          <button type="button" class="seg ativo" data-modo="n8n" role="radio" aria-checked="true">via n8n</button>
+          <button type="button" class="seg" data-modo="api" role="radio" aria-checked="false">direto na API</button>
+        </div>
+      </div>
+
+      <form id="form-msg">
+        <div class="linha-2">
+          <label>Morador<input id="morador" value="Ana Souza" maxlength="120" required></label>
+          <label>Apto<input id="apartamento" value="302B" maxlength="20"></label>
+        </div>
+        <label>Mensagem
+          <textarea id="texto" rows="4" maxlength="4000" required placeholder="Ex.: Tem água vazando do teto da garagem"></textarea>
+        </label>
+        <div class="exemplos" aria-label="Exemplos">
+          <button type="button" class="chip" data-txt="Socorro, tem cheiro de gás forte no corredor do 3º andar!">🔴 Cheiro de gás</button>
+          <button type="button" class="chip" data-txt="Tem água vazando do teto da garagem, perto da vaga 12">🟠 Vazamento</button>
+          <button type="button" class="chip" data-txt="O vizinho do 402 está com som altíssimo de novo, já passou da meia-noite!!">🟡 Barulho</button>
+          <button type="button" class="chip" data-txt="Que horas abre a piscina?">⚡ Piscina (FAQ)</button>
+          <button type="button" class="chip" data-txt="Posso fazer mudança no domingo?">⚡ Mudança (FAQ)</button>
+          <button type="button" class="chip" data-txt="Meu boleto veio com valor errado, cobraram a taxa do salão duas vezes">💰 Cobrança</button>
+        </div>
+        <button id="btn-enviar" class="btn-primario" type="submit">Enviar mensagem</button>
+        <p id="dica-modo" class="dica">A mensagem passa pelo webhook do n8n, que chama a API e decide o encaminhamento.</p>
+      </form>
+
+      <div id="resultado" class="resultado" hidden aria-live="polite"></div>
+    </section>
+
+    <!-- Coluna direita: painel do síndico -->
+    <section class="painel" aria-labelledby="t-painel">
+      <h2 id="t-painel" class="sr-only">Painel do síndico</h2>
+
+      <div class="metricas">
+        <div class="metrica"><span class="m-rotulo">Chamados</span><strong id="m-total">–</strong></div>
+        <div class="metrica destaque-critico"><span class="m-rotulo">Críticos abertos</span><strong id="m-criticos">–</strong></div>
+        <div class="metrica"><span class="m-rotulo">Em aberto</span><strong id="m-abertos">–</strong></div>
+        <div class="metrica destaque-economia"><span class="m-rotulo">Respondidos sem IA</span><strong id="m-economia">–</strong><small id="m-economia-det"></small></div>
+      </div>
+
+      <div class="cartao">
+        <div class="cartao-topo">
+          <h2>Chamados</h2>
+          <div class="filtros">
+            <select id="f-status" aria-label="Filtrar por status">
+              <option value="">Todos os status</option>
+              <option value="aberto">Abertos</option>
+              <option value="em_andamento">Em andamento</option>
+              <option value="resolvido">Resolvidos</option>
+            </select>
+            <select id="f-prioridade" aria-label="Filtrar por prioridade">
+              <option value="">Todas as prioridades</option>
+              <option value="critica">Crítica</option>
+              <option value="alta">Alta</option>
+              <option value="media">Média</option>
+              <option value="baixa">Baixa</option>
+            </select>
+            <button id="btn-atualizar" class="btn-icone" type="button" title="Atualizar" aria-label="Atualizar">↻</button>
+          </div>
+        </div>
+        <ul id="lista" class="lista"></ul>
+        <p id="vazio" class="vazio" hidden>Nenhum chamado ainda. Envie uma mensagem ao lado para começar.</p>
+      </div>
+
+      <div class="cartao">
+        <div class="cartao-topo">
+          <h2>Resumo do dia</h2>
+          <button id="btn-resumo" class="btn-secundario" type="button">Gerar com IA</button>
+        </div>
+        <div id="resumo" class="resumo"><p class="dica">Gera o relatório que o n8n envia ao síndico todo dia às 18h.</p></div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="config-n8n">
+    <form method="dialog">
+      <h3>Endereço do webhook do n8n</h3>
+      <input id="url-n8n" type="url">
+      <menu><button value="cancel">Cancelar</button><button value="ok" class="btn-primario">Salvar</button></menu>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

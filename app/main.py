@@ -3,7 +3,11 @@ from contextlib import asynccontextmanager
 from datetime import date
 from typing import Optional
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import config, db
 from .ai import ErroIA, resumir_chamados
@@ -27,6 +31,15 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/painel", StaticFiles(directory=STATIC_DIR, html=True), name="painel")
+
+
+@app.get("/", include_in_schema=False)
+def raiz():
+    return RedirectResponse("/painel/")
 
 
 @app.get("/health", tags=["sistema"])

@@ -54,7 +54,7 @@ def analise_da_faq(item: dict, texto: str) -> AnaliseIA:
         prioridade="baixa",
         setor=item["setor"],
         sentimento="neutro",
-        resumo=f"Dúvida frequente ({item['id']}): {texto[:200]}",
+        resumo=f"Dúvida frequente: {item['pergunta']}",
         resposta_morador=item["resposta"],
         respondido_pelo_regimento=True,
         trecho_regimento=item["trecho_regimento"],

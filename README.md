@@ -74,6 +74,7 @@ flowchart LR
 | Validação | **Pydantic v2** |
 | Banco de dados | **SQLite** |
 | Automação | **n8n** (3 fluxos) |
+| Front-end | **HTML, CSS e JavaScript puros**, servidos pelo FastAPI |
 | Infraestrutura | **Docker + Docker Compose** |
 | Testes | **pytest** |
 
@@ -127,7 +128,22 @@ A API monta o prompt (`app/prompts.py`) com as **regras de classificação**, o 
 | `2-escalonamento.json` | A cada 10 min (ou manual) | Busca chamados críticos abertos há mais de 30 min → alerta o síndico |
 | `3-resumo-diario.json` | Todo dia às 18h (ou manual) | Pede à IA o resumo do dia → monta o relatório do síndico |
 
-### 5.4 Endpoints da API
+### 5.4 Painel web
+
+Em **http://localhost:8000** fica o painel do Síndico IA, servido pela própria API. Não precisa de build nem de outro servidor.
+
+| Área | O que faz |
+|---|---|
+| **Mensagem do morador** | Simula o morador. Envia **pelo webhook do n8n** (fluxo completo) ou direto na API, e mostra a ação, a prioridade, o setor, a origem (FAQ/cache/IA), a resposta ao morador, o trecho do regimento e o tempo de resposta |
+| **Métricas** | Total de chamados, críticos abertos, chamados em aberto e o **percentual respondido sem IA** |
+| **Chamados** | Lista em tempo real (atualiza a cada 8 s), com filtros por status e prioridade e botões **Assumir** e **Resolver** |
+| **Resumo do dia** | Gera com IA o mesmo relatório que o n8n envia ao síndico às 18h |
+
+Tem tema claro e escuro (segue o sistema) e funciona no celular.
+
+![Painel do Síndico IA](docs/prints/15-painel.png)
+
+### 5.5 Endpoints da API
 
 | Método | Rota | Descrição |
 |---|---|---|
@@ -157,7 +173,8 @@ cp .env.example .env          # edite e coloque sua GEMINI_API_KEY
 docker compose up -d --build
 ```
 
-- API: http://localhost:8000/docs
+- **Painel:** http://localhost:8000
+- API (Swagger): http://localhost:8000/docs
 - n8n: http://localhost:5678 (crie sua conta local no primeiro acesso)
 
 **Importar os fluxos no n8n:**
@@ -233,6 +250,7 @@ Defina `AI_PROVIDER=mock` no `.env`. O sistema passa a funcionar com regras por 
 | 🟠 Chamado ("vazamento na garagem") | ![](docs/prints/12-resultado-chamado.png) |
 | 💬 Resposta pelo regimento ("mudança no domingo") | ![](docs/prints/13-resultado-regimento.png) |
 | 📋 Resumo diário | ![](docs/prints/14-resultado-resumo.png) |
+| 📊 Métricas e economia de IA | ![](docs/prints/16-metricas.png) |
 
 ---
 
@@ -248,6 +266,7 @@ sindico-ia/
 │   ├── prompts.py       # Prompts estruturados (versionados)
 │   ├── schemas.py       # Modelos Pydantic (entrada, análise da IA, chamado)
 │   ├── db.py            # Persistência em SQLite
+│   ├── static/          # Painel web (HTML, CSS e JS puros)
 │   └── config.py        # Variáveis de ambiente
 ├── data/regimento.md    # Base de conhecimento usada pela IA
 ├── data/faq.json        # Perguntas frequentes respondidas sem IA
@@ -264,7 +283,6 @@ sindico-ia/
 ## 🚀 Próximos passos
 - Integrar o **Telegram** (node *Telegram Trigger* + *Telegram* do n8n) como canal real para moradores e zelador, com botões "Assumir" e "Resolvido" que chamam `PATCH /chamados/{id}`.
 - Busca semântica (embeddings) no regimento quando ele for grande demais para ir inteiro no prompt.
-- Painel web com as métricas.
 
 ## 🔒 Segurança
 Nenhuma chave é versionada. Use o `.env` (que está no `.gitignore`) a partir do `.env.example`.

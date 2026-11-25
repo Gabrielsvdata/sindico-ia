@@ -186,7 +186,7 @@ def resumir_chamados(chamados: list[dict]) -> ResumoIA:
     if config.AI_PROVIDER == "mock":
         criticos = [c for c in chamados if c["prioridade"] == "critica"]
         return ResumoIA(
-            resumo=f"Hoje foram registrados {len(chamados)} chamados, sendo {len(criticos)} críticos.",
+            resumo=f"Hoje foram registrados {len(chamados)} chamado(s), sendo {len(criticos)} crítico(s).",
             destaques=[f"[{c['prioridade']}] {c['resumo']}" for c in chamados[:5]],
         )
 

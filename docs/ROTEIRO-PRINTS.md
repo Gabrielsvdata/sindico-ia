@@ -2,7 +2,7 @@
 
 Salve cada imagem em `docs/prints/` **com exatamente este nome**. O README já aponta para eles.
 
-Antes de começar: `docker compose up -d`, importe os fluxos, **ative/publique** o fluxo 1 e rode `./exemplos/testar.sh` para gerar execuções.
+Antes de começar: `docker compose up -d`, importe os fluxos, **ative/publique** o fluxo 1 e envie mensagens pelo painel (http://localhost:8000) no modo **via n8n**, ou rode `./exemplos/testar.sh`. Envie também uma dúvida frequente (ex.: piscina) duas vezes para aparecer a economia de IA.
 
 | # | Arquivo | O que mostrar | Onde no n8n |
 |---|---|---|---|
@@ -20,6 +20,8 @@ Antes de começar: `docker compose up -d`, importe os fluxos, **ative/publique**
 | 12 | `12-resultado-chamado.png` | Saída da mensagem "vazamento na garagem" | idem |
 | 13 | `13-resultado-regimento.png` | Saída de "mudança no domingo" mostrando `trecho_regimento` | idem |
 | 14 | `14-resultado-resumo.png` | Fluxo 3 executado (botão **Execute workflow**) com o relatório | Fluxo 3 → Execute |
+| 15 | `15-painel.png` | Painel com vários chamados de prioridades diferentes e o resultado da última mensagem | http://localhost:8000 (envie os exemplos pelos botões, no modo "via n8n") |
+| 16 | `16-metricas.png` | JSON de métricas mostrando `por_origem` e `chamadas_ia_economizadas` | http://localhost:8000/metricas |
 
 **Dicas**
 - Mostre o painel **INPUT | OUTPUT** aberto nos nodes: é isso que comprova que os dados passaram por cada etapa.
