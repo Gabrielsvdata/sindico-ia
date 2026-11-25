@@ -17,6 +17,7 @@ from .schemas import (
     ResumoDiario, Setor, Status,
 )
 from . import servico
+from .rag import buscar as buscar_na_base
 from .servico import ErroRegra, processar_mensagem
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -67,6 +68,12 @@ def listar_chamados(
     limite: int = Query(100, ge=1, le=500),
 ):
     return db.listar(status, prioridade, setor, limite)
+
+
+@app.get("/base-conhecimento/buscar", tags=["base de conhecimento"],
+         summary="O que o RAG recuperaria da base de perguntas frequentes para um texto")
+def buscar_base(q: str = Query(..., min_length=2, max_length=500)):
+    return [t.__dict__ for t in buscar_na_base(q)]
 
 
 @app.get("/caixas", tags=["chamados"], summary="Quantos chamados cada setor tem para atender agora")

@@ -32,7 +32,8 @@ flowchart LR
     W --> API[FastAPI<br/>POST /mensagens]
     API --> F{FAQ ou cache<br/>já sabe responder?}
     F -->|sim, sem IA| G
-    F -->|não| IA[🤖 Gemini<br/>prompt + regimento]
+    F -->|não| R[RAG: busca BM25<br/>nas perguntas frequentes]
+    R -->|3 entradas mais parecidas| IA[🤖 Gemini<br/>prompt + base recuperada]
     IA -->|JSON| V{Validação<br/>Pydantic}
     V -->|inválido| IA
     V -->|válido| G[Guarda-corpo<br/>de emergência]
@@ -47,7 +48,7 @@ flowchart LR
 **Como a IA participa:**
 1. **Interpreta** a mensagem em linguagem natural, mesmo informal ("tá saindo água do teto da garagem!!").
 2. **Classifica** em categoria, prioridade, setor e sentimento, sempre em **JSON estruturado**.
-3. **Responde** dúvidas consultando o regimento que vai no prompt e informa qual trecho usou.
+3. **Responde** dúvidas usando **somente a base de perguntas frequentes** (RAG): só as entradas relacionadas à mensagem vão para o prompt, e a IA precisa citar quais usou.
 4. **Resume** os chamados do dia para o síndico.
 5. *(Opcional)* **Transcreve áudios e descreve fotos** enviados pelo morador, porque o Gemini é multimodal.
 
@@ -55,7 +56,12 @@ flowchart LR
 - **A IA interpreta, o código decide.** A ação final (emergência, chamado ou resposta automática) é definida por regras em `app/servico.py`, de forma previsível e testável.
 - **Guarda-corpo de segurança.** Se a mensagem contém termos como "cheiro de gás" ou "preso no elevador", a prioridade é forçada para **crítica**, mesmo que a IA erre.
 - **Validação com nova tentativa automática.** Todo JSON da IA passa pelo Pydantic. Se vier inválido, o erro é devolvido à IA, que tenta de novo (até 3 vezes).
-- **Respostas fundamentadas.** O prompt proíbe inventar regras. A IA só responde com o que está no regimento e indica o trecho usado.
+- **RAG com a base de perguntas frequentes como única fonte.** O `data/faq.json` (17 perguntas, cada uma com variações e o trecho oficial do regimento) é a base de conhecimento. Para cada mensagem:
+  1. **Recuperação:** a busca BM25 (`app/rag.py`, local e sem custo) encontra as 3 entradas mais parecidas. Só elas vão para o prompt, não o regimento inteiro.
+  2. **Geração:** a IA responde usando apenas essas entradas e devolve em `fontes` quais usou. Se nada se aplica, encaminha para um humano.
+  3. **Validação anti-alucinação:** fontes que a IA não recebeu são descartadas. Se ela diz que respondeu mas não cita nenhuma fonte válida, o chamado **não** é encerrado e vai para a equipe. A citação mostrada ao morador vem do texto oficial do FAQ, nunca de algo escrito pela IA.
+
+  Na central, cada chamado mostra o que a IA consultou (com a pontuação da busca) e o que ela usou.
 - **Proteção contra prompt injection.** A mensagem do morador vai delimitada por `<mensagem>`, e a IA é instruída a ignorar ordens escritas ali dentro.
 - **Economia de IA (FAQ + cache).** Antes de chamar o modelo, a API tenta responder sozinha:
   1. **FAQ local** (`data/faq.json`): as 12 dúvidas mais comuns (piscina, mudança, boleto…) são reconhecidas por palavras-chave e respondidas na hora.
@@ -157,6 +163,8 @@ Em **http://localhost:8000** fica a central de atendimento do síndico e da equi
 
 **Prazos por prioridade:** crítica 30 min, alta 4 h, média 24 h, baixa 72 h. O seletor **Você é** (Síndico, Zelador, Portaria, Administração) define quem assina cada ação.
 
+**Acessibilidade (WCAG 2.2 AA):** a auditoria automática do axe-core roda dentro do teste de navegador, nos temas claro e escuro, sem nenhuma violação. Além disso: contraste mínimo de 4,5:1, link para pular direto para a fila, área principal marcada, botões com estado anunciado (`aria-pressed`), novos chamados e avisos anunciados por leitor de tela, foco do teclado preservado na atualização automática, respeito ao "reduzir movimento" do sistema, tema claro e escuro e versão para celular.
+
 ![Central de atendimento](docs/prints/15-painel.png)
 
 ### 5.5 Endpoints da API
@@ -173,6 +181,7 @@ Em **http://localhost:8000** fica a central de atendimento do síndico e da equi
 | `POST` | `/chamados/{id}/encaminhar` | Passa para outro setor e avisa o novo setor |
 | `POST` | `/chamados/{id}/prioridade` | Corrige a prioridade e recalcula o prazo |
 | `GET` | `/caixas` | Pendentes, fora do prazo e críticos de cada setor |
+| `GET` | `/base-conhecimento/buscar?q=` | Mostra o que o RAG recuperaria para um texto (útil para testar a base) |
 | `GET` | `/chamados/criticos-parados?minutos=30` | Usado no escalonamento |
 | `GET` | `/resumo-diario` | Resumo do dia gerado pela IA |
 | `GET` | `/metricas` | Contagem por categoria, prioridade, setor, status, ação e origem, além das chamadas de IA economizadas |
@@ -290,6 +299,7 @@ sindico-ia/
 │   ├── main.py          # Rotas FastAPI
 │   ├── servico.py       # Regras de negócio: FAQ/cache, guarda-corpo e decisão da ação
 │   ├── faq.py           # Respostas sem IA: perguntas frequentes e cache
+│   ├── rag.py           # Busca BM25 na base de perguntas frequentes (RAG)
 │   ├── ai.py            # Integração com o Gemini, validação e novas tentativas, provedor mock
 │   ├── prompts.py       # Prompts estruturados (versionados)
 │   ├── schemas.py       # Modelos Pydantic (entrada, análise da IA, chamado)
@@ -297,7 +307,7 @@ sindico-ia/
 │   ├── static/          # Central de atendimento (HTML, CSS e JS puros)
 │   └── config.py        # Variáveis de ambiente
 ├── data/regimento.md    # Base de conhecimento usada pela IA
-├── data/faq.json        # Perguntas frequentes respondidas sem IA
+├── data/faq.json        # Base de conhecimento: perguntas frequentes (FAQ exato e RAG)
 ├── n8n/                 # Fluxos exportados (JSON)
 ├── exemplos/            # Mensagens de exemplo + script de teste
 ├── docs/prints/         # Capturas de tela do n8n
