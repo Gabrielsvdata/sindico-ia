@@ -46,7 +46,7 @@ const estado = {
   selecionado: null,
   chamados: [],
   idsVistos: null,
-  urlN8n: guardar.ler("urlN8n", "http://localhost:5678/webhook/sindico"),
+  urlN8n: guardar.ler("urlN8n", null),
   tipoComposicao: "resposta_morador",
 };
 
@@ -454,7 +454,7 @@ $$('input[name="modo"]').forEach((r) => {
   r.addEventListener("change", () => guardar.gravar("modo", r.value));
 });
 $("#trocar-url").addEventListener("click", () => {
-  $("#url-n8n").value = estado.urlN8n;
+  $("#url-n8n").value = estado.urlN8n || "";
   const dlg = $("#dlg-n8n");
   dlg.showModal();
   dlg.addEventListener("close", () => {
@@ -552,6 +552,8 @@ async function verificarApi() {
   const el = $("#status-api");
   try {
     const h = await api("/health");
+    // Em produção, a API informa o endereço público do webhook do n8n
+    if (!estado.urlN8n) estado.urlN8n = h.n8n_webhook_url || "http://localhost:5678/webhook/sindico";
     el.className = "conexao ok";
     el.textContent = h.provedor_ia === "mock" ? "Online, IA simulada" : `Online, ${h.modelo}`;
   } catch {

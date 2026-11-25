@@ -18,7 +18,7 @@ from .schemas import (
 )
 from . import servico
 from .rag import buscar as buscar_na_base
-from .servico import ErroRegra, processar_mensagem
+from .servico import ErroRegra, LimiteIAAtingido, consumir_cota_ia, processar_mensagem
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -49,13 +49,19 @@ def raiz():
 
 @app.get("/health", tags=["sistema"])
 def health():
-    return {"status": "ok", "provedor_ia": config.AI_PROVIDER, "modelo": config.GEMINI_MODEL, "prompt": PROMPT_VERSAO}
+    return {
+        "status": "ok", "provedor_ia": config.AI_PROVIDER, "modelo": config.GEMINI_MODEL, "prompt": PROMPT_VERSAO,
+        "n8n_webhook_url": config.N8N_WEBHOOK_URL,
+        "uso_ia_hoje": db.uso_ia_hoje(), "limite_ia_diario": config.AI_LIMITE_DIARIO or None,
+    }
 
 
 @app.post("/mensagens", tags=["atendimento"], summary="Recebe a mensagem de um morador e analisa com IA")
 def receber_mensagem(msg: MensagemEntrada):
     try:
         return processar_mensagem(msg)
+    except LimiteIAAtingido as e:
+        raise HTTPException(status_code=429, detail=str(e)) from e
     except ErroIA as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
@@ -154,7 +160,11 @@ def resumo_diario(dia: Optional[date] = None):
         for c in chamados
     ]
     try:
+        if compactos:
+            consumir_cota_ia()
         r = resumir_chamados(compactos)
+    except LimiteIAAtingido as e:
+        raise HTTPException(status_code=429, detail=str(e)) from e
     except ErroIA as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
     return ResumoDiario(

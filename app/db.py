@@ -40,6 +40,11 @@ CREATE TABLE IF NOT EXISTS eventos (
 );
 CREATE INDEX IF NOT EXISTS idx_eventos_chamado ON eventos (chamado_id, id);
 
+CREATE TABLE IF NOT EXISTS uso_ia (
+    dia TEXT PRIMARY KEY,
+    chamadas INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS cache_respostas (
     chave TEXT PRIMARY KEY,
     analise_json TEXT NOT NULL,
@@ -232,6 +237,21 @@ def salvar_cache(chave: str, analise: AnaliseIA) -> None:
                ON CONFLICT(chave) DO UPDATE SET analise_json = excluded.analise_json, criado_em = excluded.criado_em""",
             (chave, analise.model_dump_json(), agora().isoformat()),
         )
+
+
+def registrar_uso_ia() -> int:
+    """Soma uma chamada à IA no dia de hoje e devolve o total do dia."""
+    dia = agora().date().isoformat()
+    with conexao() as con:
+        con.execute("INSERT INTO uso_ia (dia, chamadas) VALUES (?, 1) "
+                    "ON CONFLICT(dia) DO UPDATE SET chamadas = chamadas + 1", (dia,))
+        return con.execute("SELECT chamadas FROM uso_ia WHERE dia = ?", (dia,)).fetchone()[0]
+
+
+def uso_ia_hoje() -> int:
+    with conexao() as con:
+        row = con.execute("SELECT chamadas FROM uso_ia WHERE dia = ?", (agora().date().isoformat(),)).fetchone()
+    return row[0] if row else 0
 
 
 def caixas() -> dict:

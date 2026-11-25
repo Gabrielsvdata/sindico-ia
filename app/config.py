@@ -21,3 +21,9 @@ AI_MAX_TENTATIVAS = int(os.getenv("AI_MAX_TENTATIVAS", "3"))
 AI_TENTATIVAS_SOBRECARGA = int(os.getenv("AI_TENTATIVAS_SOBRECARGA", "2"))
 # Tempo máximo de espera por resposta do Gemini em cada tentativa
 AI_TIMEOUT_SEGUNDOS = float(os.getenv("AI_TIMEOUT_SEGUNDOS", "30"))
+
+# Máximo de chamadas à IA por dia (protege a cota da chave quando a API fica pública). 0 = sem limite.
+AI_LIMITE_DIARIO = int(os.getenv("AI_LIMITE_DIARIO", "0"))
+
+# Endereço público do webhook do n8n, usado pela central (simulador) como padrão
+N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "http://localhost:5678/webhook/sindico")

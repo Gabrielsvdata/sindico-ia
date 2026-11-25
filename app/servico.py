@@ -21,6 +21,10 @@ ROTULO_ORIGEM = {"faq": "perguntas frequentes (sem IA)", "cache": "resposta já 
 PERGUNTAS = {item["id"]: item["pergunta"] for item in carregar_faq()}
 
 
+class LimiteIAAtingido(Exception):
+    """A cota diária de chamadas à IA acabou."""
+
+
 class ErroRegra(Exception):
     """Ação não permitida no estado atual do chamado."""
 
@@ -69,6 +73,18 @@ def parece_emergencia(texto: str) -> bool:
     return any(p in t for p in PALAVRAS_EMERGENCIA)
 
 
+def consumir_cota_ia() -> None:
+    """Bloqueia novas chamadas à IA quando o limite diário é atingido (AI_LIMITE_DIARIO)."""
+    if config.AI_PROVIDER == "mock" or config.AI_LIMITE_DIARIO <= 0:
+        return
+    if db.uso_ia_hoje() >= config.AI_LIMITE_DIARIO:
+        raise LimiteIAAtingido(
+            f"O limite de {config.AI_LIMITE_DIARIO} análises com IA por dia foi atingido. "
+            "Dúvidas do FAQ continuam sendo respondidas; as demais voltam a funcionar amanhã."
+        )
+    db.registrar_uso_ia()
+
+
 def validar_fontes(analise: AnaliseIA, trechos: list) -> tuple[AnaliseIA, list[str]]:
     """Anti-alucinação: a IA só pode citar entradas que o RAG entregou a ela.
 
@@ -96,6 +112,7 @@ def obter_analise(msg: MensagemEntrada) -> tuple[AnaliseIA, str, dict]:
         if guardada:
             return guardada, "cache", {"consultadas": []}
 
+    consumir_cota_ia()
     trechos = buscar_na_base(msg.texto)
     analise = analisar_mensagem(msg, trechos)
     analise, descartadas = validar_fontes(analise, trechos)

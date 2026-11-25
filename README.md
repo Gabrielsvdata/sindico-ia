@@ -234,6 +234,21 @@ uvicorn app.main:app --reload
 
 Em outro terminal, rode o n8n com `npx n8n`, importe os fluxos e **troque a URL `http://api:8000` por `http://localhost:8000`** nos nodes HTTP Request.
 
+### Opção C — Produção no Render
+
+O arquivo `render.yaml` cria dois serviços a partir deste repositório: a **API com a central** (`sindico-ia-api`) e o **n8n** (`sindico-ia-n8n`). O n8n usa `deploy/n8n.Dockerfile`, que já embute os fluxos da pasta `n8n/`. A cada inicialização, o script `deploy/n8n-iniciar.sh` importa os fluxos, troca `http://api:8000` pelo endereço público da API e publica o fluxo de atendimento.
+
+1. No [Render](https://render.com), clique em **New → Blueprint** e escolha este repositório.
+2. Preencha as variáveis pedidas:
+   - `GEMINI_API_KEY`: sua chave do Gemini;
+   - `N8N_WEBHOOK_URL`: `https://sindico-ia-n8n.onrender.com/webhook/sindico`;
+   - `API_URL`: `https://sindico-ia-api.onrender.com`.
+
+   Se o Render der outro nome aos serviços, use os endereços que ele mostrar.
+3. Aguarde o deploy dos dois serviços e abra `https://sindico-ia-api.onrender.com`.
+
+**Limites do plano gratuito:** os serviços "dormem" após 15 minutos sem uso (o primeiro acesso leva cerca de 1 minuto), e o banco SQLite fica em `/tmp`, então os chamados somem quando o serviço reinicia. Para dados permanentes, use um plano pago com disco (`DATABASE_PATH` apontando para o disco). `AI_LIMITE_DIARIO=100` impede que alguém gaste toda a cota da sua chave enviando mensagens em massa.
+
 ### Testes automatizados
 
 ```bash
@@ -344,6 +359,8 @@ sindico-ia/
 ├── exemplos/            # Mensagens de exemplo + script de teste
 ├── docs/prints/         # Capturas de tela do n8n
 ├── tests/               # Testes da API (pytest) e da central no navegador (tests/e2e)
+├── deploy/              # Imagem do n8n e script de inicialização para o Render
+├── render.yaml          # Blueprint do Render (API + n8n)
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example

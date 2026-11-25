@@ -230,3 +230,15 @@ def test_painel_e_servido(client):
     pagina = client.get("/painel/")
     assert pagina.status_code == 200 and "Síndico IA" in pagina.text
     assert client.get("/painel/app.js").status_code == 200
+
+
+def test_limite_diario_de_ia(client, monkeypatch):
+    monkeypatch.setattr(config, "AI_PROVIDER", "gemini")
+    monkeypatch.setattr(config, "AI_LIMITE_DIARIO", 1)
+    monkeypatch.setattr("app.servico.analisar_mensagem", lambda msg, trechos=None: ai._analisar_mock(msg, trechos or []))
+    assert client.post("/mensagens", json={"texto": "Tem água vazando na garagem"}).status_code == 200
+    r = client.post("/mensagens", json={"texto": "O portão da garagem quebrou"})
+    assert r.status_code == 429 and "limite" in r.json()["detail"]
+    # Perguntas do FAQ não gastam IA e continuam funcionando
+    assert client.post("/mensagens", json={"texto": "Que horas abre a piscina?"}).status_code == 200
+    assert client.get("/health").json()["uso_ia_hoje"] == 1
