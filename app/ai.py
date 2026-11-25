@@ -130,7 +130,7 @@ def _analisar_mock(msg: MensagemEntrada, trechos: list) -> AnaliseIA:
     elif tem("vazamento", "vazando", "infiltra", "goteira", "elevador", "sem agua", "portao"):
         cat, pri, setor = "manutencao", "alta", "zeladoria"
         resposta = "Recebemos seu aviso e abrimos um chamado para a zeladoria com prioridade alta."
-    elif tem("barulho", "som alto", "festa", "musica"):
+    elif tem("barulho", "som alt", "festa", "musica", "gritaria"):
         cat, pri, setor = "barulho", "media", "sindico"
         resposta = "Registramos sua reclamação de barulho. O horário de silêncio é das 22h às 8h (dom. a qui.) e das 23h às 9h (sex., sáb. e vésperas de feriado). O síndico foi informado."
     elif tem("boleto", "taxa", "cobranca", "multa", "pagamento"):

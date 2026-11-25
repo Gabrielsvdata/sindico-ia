@@ -256,38 +256,70 @@ Defina `AI_PROVIDER=mock` no `.env`. O sistema passa a funcionar com regras por 
 
 ## 7. Documentação do Fluxo de Automação
 
-> As imagens ficam em `docs/prints/`. O roteiro do que capturar está em [`docs/ROTEIRO-PRINTS.md`](docs/ROTEIRO-PRINTS.md).
+> Prints feitos no n8n 2.35 com os arquivos da pasta `n8n/` importados sem nenhuma alteração. As mensagens entraram pelo webhook de produção (`POST /webhook/sindico`), passaram pela API e voltaram pelo fluxo. Nestes prints, a API rodou com a IA em modo simulado (`AI_PROVIDER=mock`, que segue o mesmo formato de JSON e as mesmas validações). Com `AI_PROVIDER=gemini`, o fluxo do n8n é exatamente o mesmo.
 
-### 7.1 Fluxo completo
-![Fluxo de atendimento completo](docs/prints/01-fluxo-atendimento.png)
-*Os 8 nodes do fluxo principal: o webhook recebe a mensagem, a API analisa com IA e o Switch distribui em 3 caminhos.*
+### 7.1 Fluxos completos
+
+**Fluxo 1, atendimento de mensagens:** o webhook recebe a mensagem, o Edit Fields normaliza os campos, o HTTP Request chama a API (que classifica com IA) e o Switch divide em três caminhos (emergência, chamado ou resposta automática), que terminam devolvendo a resposta ao morador.
+
+![Fluxo de atendimento](docs/prints/01-fluxo-atendimento.png)
+
+**Fluxo 2, escalonamento:** a cada 10 minutos (ou pelo gatilho manual de teste), busca chamados críticos abertos há mais de 30 minutos e monta um alerta para o síndico.
 
 ![Fluxo de escalonamento](docs/prints/02-fluxo-escalonamento.png)
+
+**Fluxo 3, resumo diário:** todo dia às 18h, pede à API o resumo do dia gerado pela IA e monta o relatório do síndico.
+
 ![Fluxo de resumo diário](docs/prints/03-fluxo-resumo.png)
 
 ### 7.2 Execução bem-sucedida
+
+Aba **Executions** com as cinco mensagens de teste, todas com sucesso. A execução aberta é a de emergência ("cheiro de gás"), e o caminho verde mostra que ela seguiu pela saída **Emergência** do Switch.
+
 ![Execução com sucesso](docs/prints/04-execucao-sucesso.png)
-*Execução concluída de uma mensagem de emergência, com todos os nodes em verde.*
 
 ### 7.3 Configuração dos nodes
 
-| Node | Função | Print |
-|---|---|---|
-| Webhook - Mensagem do morador | Recebe `POST /webhook/sindico` e responde via node "Respond to Webhook" | ![](docs/prints/05-node-webhook.png) |
-| Edit Fields - Normalizar entrada | Extrai `texto`, `morador`, `apartamento` e `canal` do body e preenche os valores padrão | ![](docs/prints/06-node-edit-fields.png) |
-| HTTP Request - Analisar com IA | `POST http://api:8000/mensagens` com o JSON normalizado | ![](docs/prints/07-node-http-request.png) |
-| Switch - Decidir ação | 3 regras sobre `{{$json.acao}}`: emergência, chamado ou resposta automática | ![](docs/prints/08-node-switch.png) |
-| Emergência / Chamado / Resposta | Monta o destino, o alerta para o setor e a resposta ao morador | ![](docs/prints/09-node-ramos.png) |
-| Respond to Webhook | Devolve o JSON final para quem enviou a mensagem | ![](docs/prints/10-node-respond.png) |
+Cada print mostra a entrada (à esquerda), a configuração (ao centro) e a saída (à direita) com os dados reais da execução.
+
+| Node | Função |
+|---|---|
+| **Webhook - Mensagem do morador** | Recebe `POST /webhook/sindico` e deixa a resposta para o node "Respond to Webhook" |
+| **Edit Fields - Normalizar entrada** | Extrai `texto`, `morador`, `apartamento` e `canal` do corpo e preenche os valores padrão |
+| **HTTP Request - Analisar com IA** | `POST http://api:8000/mensagens`: a API busca no FAQ (RAG), chama a IA, valida o JSON e cria o chamado |
+| **Switch - Decidir ação** | Três regras sobre `{{ $json.acao }}`: `emergencia`, `abrir_chamado` e `responder_automaticamente` |
+| **Ramos (Emergência, Chamado, Resposta automática)** | Montam o destino, o alerta para o setor e a resposta ao morador |
+| **Respond to Webhook - Devolver ao morador** | Devolve o JSON final para quem enviou a mensagem |
+
+![Webhook](docs/prints/05-node-webhook.png)
+![Edit Fields](docs/prints/06-node-edit-fields.png)
+![HTTP Request](docs/prints/07-node-http-request.png)
+![Switch](docs/prints/08-node-switch.png)
+![Ramo de chamado](docs/prints/09-node-ramos.png)
+![Respond to Webhook](docs/prints/10-node-respond.png)
 
 ### 7.4 Resultados
-| Cenário | Print |
-|---|---|
-| 🔴 Emergência ("cheiro de gás") | ![](docs/prints/11-resultado-emergencia.png) |
-| 🟠 Chamado ("vazamento na garagem") | ![](docs/prints/12-resultado-chamado.png) |
-| 💬 Resposta pelo regimento ("mudança no domingo") | ![](docs/prints/13-resultado-regimento.png) |
-| 📋 Resumo diário | ![](docs/prints/14-resultado-resumo.png) |
-| 📊 Métricas e economia de IA | ![](docs/prints/16-metricas.png) |
+
+**Emergência ("cheiro de gás"):** prioridade crítica, alerta para a portaria, o zelador de plantão e o síndico, e orientação ao morador para ligar no ramal 9 ou no 193.
+![Resultado da emergência](docs/prints/11-resultado-emergencia.png)
+
+**Chamado ("vazamento na garagem"):** prioridade alta, encaminhado para a Zeladoria.
+![Resultado do chamado](docs/prints/12-resultado-chamado.png)
+
+**Dúvida respondida pelo RAG ("meu amigo vai vir hoje, como ele entra?"):** a pergunta não bate com nenhuma regra exata do FAQ. A busca encontrou a entrada `visitantes`, a IA respondeu citando essa fonte, e o trecho oficial do regimento foi anexado.
+![Resultado do RAG](docs/prints/13-resultado-regimento.png)
+
+**Escalonamento:** o chamado crítico estava aberto havia mais de 30 minutos, e o fluxo 2 gerou o alerta para o síndico.
+![Resultado do escalonamento](docs/prints/02b-resultado-escalonamento.png)
+
+**Resumo diário:** relatório do síndico com o total de chamados, os críticos pendentes e os destaques.
+![Resultado do resumo](docs/prints/14-resultado-resumo.png)
+
+**Central de atendimento:** o chamado do vazamento depois que o zelador assumiu, registrou uma nota interna e respondeu ao morador.
+![Central de atendimento](docs/prints/15-painel.png)
+
+**Métricas:** cinco mensagens, uma respondida sem IA (FAQ exato) e um chamado fora do prazo.
+![Métricas](docs/prints/16-metricas.png)
 
 ---
 
