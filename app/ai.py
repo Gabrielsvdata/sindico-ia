@@ -118,7 +118,7 @@ def _gerar_validado(system: str, partes: list[dict], modelo: type[BaseModel]) ->
 
 # ---------------------------------------------------------------- Mock
 
-def _analisar_mock(msg: MensagemEntrada) -> AnaliseIA:
+def _analisar_mock(msg: MensagemEntrada, trechos: list) -> AnaliseIA:
     t = normalizar(msg.texto)
 
     def tem(*palavras: str) -> bool:
@@ -146,16 +146,11 @@ def _analisar_mock(msg: MensagemEntrada) -> AnaliseIA:
         cat, pri, setor = "outros", "baixa", "administracao"
         resposta = "Recebemos sua mensagem e encaminhamos para a administração."
 
-    respondido = False
-    trecho = None
-    if cat == "duvida" and tem("mudanca"):
-        respondido = True
-        trecho = "Mudanças: segunda a sábado, das 8h às 18h, com agendamento prévio (mínimo de 48h). Proibidas aos domingos."
-        resposta = "Mudanças são permitidas de segunda a sábado, das 8h às 18h, com agendamento na administração com 48h de antecedência. Aos domingos não é permitido."
-    elif cat == "duvida" and tem("piscina"):
-        respondido = True
-        trecho = "Piscina: aberta de terça a domingo, das 8h às 20h. Fechada às segundas para limpeza."
-        resposta = "A piscina funciona de terça a domingo, das 8h às 20h. Às segundas fica fechada para limpeza."
+    # Simula o RAG: se é uma dúvida e a busca achou uma entrada bem parecida, responde com ela
+    respondido, fontes = False, []
+    if cat in ("duvida", "outros", "encomenda") and trechos and trechos[0].score >= 4:
+        cat, pri, setor = "duvida", "baixa", trechos[0].setor
+        respondido, fontes, resposta = True, [trechos[0].id], trechos[0].resposta
 
     sentimento = "negativo" if tem("absurdo", "!!", "inaceitavel", "de novo", "cansad") else "neutro"
 
@@ -167,23 +162,26 @@ def _analisar_mock(msg: MensagemEntrada) -> AnaliseIA:
         resumo=msg.texto[:280],
         resposta_morador=resposta,
         respondido_pelo_regimento=respondido,
-        trecho_regimento=trecho,
+        fontes=fontes,
+        trecho_regimento=None,
         transcricao_anexo=None,
-        confianca=0.6,
+        confianca=0.8 if respondido else 0.6,
     )
 
 
 # ---------------------------------------------------------------- API pública
 
-def analisar_mensagem(msg: MensagemEntrada) -> AnaliseIA:
+def analisar_mensagem(msg: MensagemEntrada, trechos: list | None = None) -> AnaliseIA:
+    """Classifica a mensagem. `trechos` são as entradas do FAQ recuperadas pelo RAG (única base permitida)."""
+    trechos = trechos or []
     if config.AI_PROVIDER == "mock":
         modelo_usado.set("mock")
-        return _analisar_mock(msg)
+        return _analisar_mock(msg, trechos)
 
     partes: list[dict] = [{"text": montar_mensagem_usuario(msg.texto, msg.morador, msg.apartamento)}]
     if msg.anexo_base64 and msg.anexo_mime:
         partes.append({"inlineData": {"mimeType": msg.anexo_mime, "data": msg.anexo_base64}})
-    return _gerar_validado(montar_system_prompt(), partes, AnaliseIA)
+    return _gerar_validado(montar_system_prompt(trechos), partes, AnaliseIA)
 
 
 def resumir_chamados(chamados: list[dict]) -> ResumoIA:

@@ -19,7 +19,7 @@ TAMANHO_MAXIMO_FAQ = 250
 SINAIS_DE_PROBLEMA = (
     "errad", "cobra", "quebr", "vaza", "vazou", "barulho", "nao funciona", "parou", "estrag", "reclam",
     "absurd", "problema", "defeito", "suj", "entup", "espalh", "briga", "ameac", "denunc", "multa",
-    "vizinh", "de novo", "toda hora", "todo dia", "toda noite",
+    "vizinh", "de novo", "toda hora", "todo dia", "toda noite", "ocupad", "urgente",
 )
 
 
@@ -57,6 +57,7 @@ def analise_da_faq(item: dict, texto: str) -> AnaliseIA:
         resumo=f"Dúvida frequente: {item['pergunta']}",
         resposta_morador=item["resposta"],
         respondido_pelo_regimento=True,
+        fontes=[item["id"]],
         trecho_regimento=item["trecho_regimento"],
         transcricao_anexo=None,
         confianca=1.0,

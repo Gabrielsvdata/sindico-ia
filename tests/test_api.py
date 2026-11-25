@@ -45,7 +45,7 @@ def test_guarda_corpo_corrige_ia(client, monkeypatch):
         categoria="outros", prioridade="baixa", setor="administracao", sentimento="neutro",
         resumo="x", resposta_morador="ok", respondido_pelo_regimento=False, confianca=0.9,
     )
-    monkeypatch.setattr("app.servico.analisar_mensagem", lambda msg: errada)
+    monkeypatch.setattr("app.servico.analisar_mensagem", lambda msg, trechos=None: errada)
     r = enviar(client, "Meu vizinho ficou preso no elevador")
     assert r["prioridade"] == "critica"
     assert r["regra_seguranca_aplicada"] is True
@@ -148,7 +148,7 @@ def test_timeout_passa_para_modelo_reserva(monkeypatch):
 # ---------------------------------------------------------------- FAQ e cache (respostas sem IA)
 
 def proibir_ia(monkeypatch):
-    def falhar(msg):
+    def falhar(msg, trechos=None):
         raise AssertionError("A IA não deveria ter sido chamada")
     monkeypatch.setattr("app.servico.analisar_mensagem", falhar)
 
@@ -178,12 +178,12 @@ def test_cache_reaproveita_resposta_da_ia(client, monkeypatch):
     resposta = AnaliseIA(
         categoria="duvida", prioridade="baixa", setor="administracao", sentimento="neutro",
         resumo="Dúvida sobre visitas", resposta_morador="Visitantes precisam ser autorizados pelo morador.",
-        respondido_pelo_regimento=True, trecho_regimento="Visitantes precisam ser autorizados.", confianca=0.9,
+        respondido_pelo_regimento=True, fontes=["visitantes"], confianca=0.9,
     )
-    monkeypatch.setattr("app.servico.analisar_mensagem", lambda msg: chamadas.append(1) or resposta)
+    monkeypatch.setattr("app.servico.analisar_mensagem", lambda msg, trechos=None: chamadas.append(1) or resposta)
 
-    primeira = enviar(client, "Visita precisa ser autorizada?")
-    segunda = enviar(client, "visita precisa ser AUTORIZADA??")
+    primeira = enviar(client, "Meu amigo vem hoje, como ele entra no prédio?")
+    segunda = enviar(client, "meu amigo vem HOJE como ele entra no predio")
 
     assert (primeira["origem"], segunda["origem"]) == ("ia", "cache")
     assert len(chamadas) == 1

@@ -19,6 +19,7 @@ const passo = async (nome, fn) => { await fn(); passos.push(nome); console.log("
 
   const simular = async (exemplo, { modo = "n8n", canal = "whatsapp", apto = "302B", nome = "Ana Souza" } = {}) => {
     if (!(await p.$eval("#simulador", (d) => d.open))) await p.click("#abrir-simulador");
+    await p.selectOption("#chamado-existente", "");
     await p.fill("#morador", nome);
     await p.fill("#apartamento", apto);
     await p.selectOption("#canal", canal);
@@ -47,7 +48,7 @@ const passo = async (nome, fn) => { await fn(); passos.push(nome); console.log("
     const pendentes = await p.$$eval("#lista li", (l) => l.length);
     assert.strictEqual(pendentes, 4, "4 pendentes (a dúvida da piscina foi respondida sozinha)");
     const portaria = await p.textContent('[data-caixa="portaria"] .contador');
-    assert.strictEqual(portaria.trim(), "1");
+    assert.strictEqual(portaria.replace(/\D/g, ""), "1");
   });
 
   await passo("abrir chamado mostra a conversa e de onde vieram as informações", async () => {
@@ -57,8 +58,8 @@ const passo = async (nome, fn) => { await fn(); passos.push(nome); console.log("
     assert(/Carlos Lima \(apto 104A\), por WhatsApp/.test(conversa), "autor e canal da mensagem");
     assert(/Classificado como/.test(conversa), "análise registrada");
     assert(/Zeladoria foi avisado pelo n8n/.test(conversa), "alerta do setor");
-    const origem = await p.textContent(".origem");
-    assert(/WhatsApp/.test(origem) && /pelo webhook do n8n/.test(origem) && /Inteligência artificial/.test(origem));
+    const origem = await p.textContent(".origem-linha");
+    assert(/Chegou por WhatsApp pelo n8n e foi analisado pela IA/.test(origem), origem);
     await p.screenshot({ path: `${PASTA}/02-conversa.png` });
   });
 
@@ -89,10 +90,16 @@ const passo = async (nome, fn) => { await fn(); passos.push(nome); console.log("
     await p.screenshot({ path: `${PASTA}/03-resolvido.png` });
   });
 
-  await passo("morador responde e o chamado reabre sozinho", async () => {
-    await p.click('.comp-aba[data-tipo="mensagem_morador"]');
-    await p.fill("#comp-texto", "Voltou a pingar perto da vaga 12.");
-    await p.click("#comp-enviar");
+  await passo("morador responde pelo simulador e o chamado reabre sozinho", async () => {
+    const id = await p.$eval("#det-titulo", () => document.querySelector('.item[aria-current="true"]')?.dataset.id
+      || document.querySelector(".det-quem p").textContent.match(/Chamado (\d+)/)[1]);
+    await p.click("#abrir-simulador");
+    await p.waitForSelector(`#chamado-existente option[value="${id}"]`, { state: "attached" });
+    await p.selectOption("#chamado-existente", String(id));
+    await p.fill("#texto", "Voltou a pingar perto da vaga 12.");
+    await p.click("#btn-enviar");
+    await p.waitForSelector("#sim-resultado #ver-chamado");
+    await p.click("#sim-resultado #ver-chamado");
     await p.waitForSelector('.det-tags .tag:has-text("Aberto")');
     assert(/Reaberto: o morador enviou uma nova mensagem/.test(await p.textContent("#conversa")));
   });
@@ -123,7 +130,7 @@ const passo = async (nome, fn) => { await fn(); passos.push(nome); console.log("
     await p.click('[data-caixa="todas"]');
     await p.waitForSelector('#lista .item:has-text("piscina")');
     await p.click('#lista .item:has-text("piscina")');
-    await p.waitForSelector('.origem:has-text("Perguntas frequentes")');
+    await p.waitForSelector('.origem-linha:has-text("pelas perguntas frequentes")');
     assert(/Regimento: “Piscina/.test(await p.textContent("#conversa")));
     await p.click('.aba[data-filtro="pendentes"]');
   });
@@ -135,6 +142,19 @@ const passo = async (nome, fn) => { await fn(); passos.push(nome); console.log("
     assert.deepStrictEqual(avisos, ["Portaria", "Zelador de plantão", "Síndico"]);
     assert(/Prazo termina em(2\d|30) min/.test(await p.textContent(".prazo")));
     await p.screenshot({ path: `${PASTA}/04-emergencia.png` });
+  });
+
+  await passo("RAG: dúvida fora do FAQ exato é respondida pela IA citando a base", async () => {
+    await simular("Mudança no domingo", {});   // garante simulador aberto
+    await p.fill("#texto", "meu amigo vai vir hoje, como faço pra ele entrar?");
+    await p.click("#btn-enviar");
+    await p.waitForSelector("#sim-resultado #ver-chamado", { timeout: 60000 });
+    await p.click("#sim-resultado #ver-chamado");
+    await p.waitForSelector('.origem-linha:has-text("Resposta baseada em")');
+    await p.click(".origem-linha summary");
+    const base = await p.textContent(".base-lista");
+    assert(/usada na resposta/.test(base), base);
+    await p.screenshot({ path: `${PASTA}/07-rag.png` });
   });
 
   await passo("resumo do dia", async () => {
@@ -156,6 +176,27 @@ const passo = async (nome, fn) => { await fn(); passos.push(nome); console.log("
     assert(!lateral, "não pode ter rolagem lateral");
     await m.click("#voltar");
     assert(await m.isVisible("#lista"));
+  });
+
+  await passo("acessibilidade WCAG 2.2 AA (axe-core) sem violações", async () => {
+    let axe;
+    try { axe = require("fs").readFileSync(require.resolve("axe-core/axe.min.js"), "utf8"); }
+    catch { console.log("   (axe-core não instalado: npm install axe-core para rodar este passo)"); return; }
+    for (const esquema of ["light", "dark"]) {
+      const a = await navegador.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: esquema });
+      await a.goto(BASE, { waitUntil: "networkidle" });
+      await a.click("#lista .item");
+      await a.waitForSelector("#conversa .ev-morador");
+      await a.click(".origem-linha summary");
+      for (const etapa of ["central", "simulador"]) {
+        if (etapa === "simulador") await a.click("#abrir-simulador");
+        await a.addScriptTag({ content: axe });
+        const r = await a.evaluate(() => axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] }));
+        const v = r.violations.map((x) => `${esquema}/${etapa}: ${x.id} (${x.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(", ")})`);
+        assert.deepStrictEqual(v, [], v.join("\n"));
+      }
+      await a.close();
+    }
   });
 
   assert.deepStrictEqual(erros, [], "erros no console: " + erros.join(" | "));

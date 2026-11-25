@@ -85,10 +85,16 @@ function placa(apto, grande = false) {
     ? `<span class="placa${grande ? " placa-grande" : ""}" title="Apartamento">${esc(apto)}</span>`
     : `<span class="placa placa-sem${grande ? " placa-grande" : ""}" title="Apartamento não informado">s/ apto</span>`;
 }
+function tempo(iso, classe = "") {
+  const completo = new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  return `<time class="${classe}" datetime="${esc(iso)}" title="${completo}">${relativo(iso)}</time>`;
+}
+function anunciar(texto) { $("#anuncio").textContent = ""; setTimeout(() => { $("#anuncio").textContent = texto; }, 50); }
 function avisar(texto) {
   const el = $("#aviso");
   el.textContent = texto;
   el.hidden = false;
+  anunciar(texto);
   clearTimeout(avisar.t);
   avisar.t = setTimeout(() => { el.hidden = true; }, 3200);
 }
@@ -103,8 +109,8 @@ async function carregarCaixas() {
 
   $("#lista-caixas").innerHTML = linhas.map(([k, s, pend, atras]) => `
     <li><button class="caixa${estado.caixa === k ? " ativa" : ""}" data-caixa="${k}" aria-pressed="${estado.caixa === k}">
-      <span><span class="nome">${s.nome}</span><span class="sub">${atras ? `${atras} fora do prazo` : s.sub}</span></span>
-      <span class="contador${atras ? " alerta" : ""}" title="${pend} pendentes">${pend}</span>
+      <span><span class="nome">${s.nome}</span>${atras ? `<span class="sub">${atras} fora do prazo</span>` : ""}</span>
+      <span class="contador${atras ? " alerta" : ""}"><span class="sr-only">, </span>${pend}<span class="sr-only"> pendentes</span></span>
     </button></li>`).join("");
 
   $("#i-sem-ia").textContent = `${m.percentual_sem_ia ?? 0}%`;
@@ -123,7 +129,7 @@ $("#lista-caixas").addEventListener("click", (e) => {
 // ------------------------------------------------------------------ fila
 $$(".aba").forEach((b) => b.addEventListener("click", () => {
   estado.filtro = b.dataset.filtro;
-  $$(".aba").forEach((x) => { x.classList.toggle("ativa", x === b); x.setAttribute("aria-selected", x === b); });
+  $$(".aba").forEach((x) => { x.classList.toggle("ativa", x === b); x.setAttribute("aria-pressed", x === b); });
   carregarFila();
 }));
 
@@ -144,20 +150,22 @@ async function carregarFila() {
   estado.idsVistos = new Set([...(estado.idsVistos || []), ...lista.map((c) => c.id)]);
   estado.chamados = lista;
 
+  const focado = document.activeElement?.closest?.("#lista [data-id]")?.dataset.id;
   $("#lista").innerHTML = lista.map((c) => `
     <li><button class="item pr-${c.prioridade}${novos.has(c.id) ? " novo" : ""}" data-id="${c.id}"
         aria-current="${estado.selecionado === c.id}">
       ${placa(c.apartamento)}
-      <span class="item-linha1"><span class="item-nome">${esc(c.morador)}</span><span class="item-tempo">${relativo(c.criado_em)}</span></span>
+      <span class="item-linha1"><span class="item-nome">${esc(c.morador)}</span>${tempo(c.criado_em, "item-tempo")}</span>
       <span class="item-resumo">${esc(c.analise.resumo)}</span>
       <span class="item-tags">
+        <span class="tag pr-${c.prioridade}"><span class="sr-only">Prioridade </span>${PRIORIDADES[c.prioridade]}</span>
         ${c.atrasado ? '<span class="tag atrasado">Fora do prazo</span>' : ""}
-        <span class="tag pr-${c.prioridade}">${PRIORIDADES[c.prioridade]}</span>
-        ${estado.caixa === "todas" ? `<span class="tag">${SETORES[c.setor].nome}</span>` : ""}
-        ${c.status !== "aberto" ? `<span class="tag st-${c.status}">${STATUS[c.status]}</span>` : ""}
-        ${c.origem !== "ia" ? '<span class="tag sem-ia">Sem IA</span>' : ""}
+        ${c.status === "em_andamento" ? `<span class="tag st-em_andamento">${STATUS[c.status]}</span>` : ""}
       </span>
     </button></li>`).join("");
+
+  if (focado) $(`#lista [data-id="${focado}"]`)?.focus();
+  if (novos.size) anunciar(novos.size === 1 ? "Chegou 1 chamado novo." : `Chegaram ${novos.size} chamados novos.`);
 
   const vazio = $("#fila-vazia");
   vazio.hidden = lista.length > 0;
@@ -176,12 +184,18 @@ $("#lista").addEventListener("click", (e) => {
 $("#fila-vazia").addEventListener("click", (e) => { if (e.target.closest("[data-simular]")) abrirSimulador(); });
 
 // ------------------------------------------------------------------ detalhe do chamado
-async function abrirChamado(id, { rolar = true } = {}) {
+async function abrirChamado(id, { rolar = true, forcar = true } = {}) {
+  const trocou = estado.selecionado !== id;
   estado.selecionado = id;
   $$(".item").forEach((el) => el.setAttribute("aria-current", Number(el.dataset.id) === id));
   $("#central").classList.add("vendo-detalhe");
   const [c, eventos] = await Promise.all([api(`/chamados/${id}`), api(`/chamados/${id}/eventos`)]);
+  // Só redesenha se algo mudou, para não tirar o foco de quem navega pelo teclado
+  const versao = `${c.atualizado_em}|${c.status}|${eventos.length}`;
+  if (!forcar && !trocou && versao === estado.versaoDetalhe) return;
+  estado.versaoDetalhe = versao;
   renderizarDetalhe(c, eventos, rolar);
+  if (trocou && forcar) $("#det-titulo")?.focus();
 }
 
 function renderizarDetalhe(c, eventos, rolar) {
@@ -196,19 +210,26 @@ function renderizarDetalhe(c, eventos, rolar) {
     ? `<div class="prazo">Resolvido<strong>${c.resolvido_em ? relativo(c.resolvido_em) : ""}</strong></div>`
     : `<div class="prazo${c.atrasado ? " estourado" : ""}">${c.atrasado ? "Fora do prazo há" : "Prazo termina em"}<strong>${duracao(minRestantes)}</strong></div>`;
 
-  const origem = c.origem === "ia"
-    ? `Inteligência artificial<small>${esc(analise.modelo || "modelo")}, confiança de ${Math.round((c.analise.confianca || 0) * 100)}%</small>`
-    : c.origem === "faq"
-      ? "Perguntas frequentes<small>respondido sem usar a IA</small>"
-      : "Resposta já dada antes<small>reaproveitada do cache, sem IA</small>";
+  const quem = c.origem === "ia"
+    ? `pela IA (${esc(analise.modelo || "modelo")}, confiança de ${Math.round((c.analise.confianca || 0) * 100)}%)`
+    : c.origem === "faq" ? "pelas perguntas frequentes, sem usar IA" : "com uma resposta já dada antes, sem usar IA";
+  const usadas = new Set((analise.fontes || []).map((f) => f.id));
+  const base = analise.base_consultada || [];
+  const baseHtml = base.length
+    ? `<ul class="base-lista">${base.map((b) => `<li class="${usadas.has(b.id) ? "usada" : ""}">
+        <span class="pontos">${b.score == null ? "exata" : `${b.score} pts`}</span>
+        <span>${esc(b.pergunta)}${usadas.has(b.id) ? " (usada na resposta)" : ""}</span></li>`).join("")}</ul>`
+    : "<p>Nenhuma pergunta frequente tinha relação com a mensagem.</p>";
+  const descartadas = (analise.fontes_descartadas || []).length
+    ? `<p>A IA citou ${analise.fontes_descartadas.length} fonte(s) que não recebeu. Elas foram ignoradas.</p>` : "";
 
   el.innerHTML = `
     <div class="det-cabeca">
       <button class="btn btn-contorno voltar" type="button" id="voltar" aria-label="Voltar para a fila">Voltar</button>
       ${placa(c.apartamento, true)}
       <div class="det-quem">
-        <h2>${esc(c.morador)}</h2>
-        <p>Chamado ${c.id}, aberto ${relativo(c.criado_em)}${c.responsavel ? `, com ${esc(c.responsavel)}` : ""}</p>
+        <h2 id="det-titulo" tabindex="-1">${esc(c.morador)}</h2>
+        <p>Chamado ${c.id}, aberto ${tempo(c.criado_em)}${c.responsavel ? `, com ${esc(c.responsavel)}` : ""}</p>
         <div class="det-tags">
           <span class="tag pr-${c.prioridade}">${PRIORIDADES[c.prioridade]}</span>
           <span class="tag">${CATEGORIAS[c.analise.categoria] || c.analise.categoria}</span>
@@ -220,23 +241,26 @@ function renderizarDetalhe(c, eventos, rolar) {
       ${prazoHtml}
     </div>
 
-    <dl class="origem" aria-label="De onde vieram as informações">
-      <div><dt>Como chegou</dt><dd>${esc(CANAIS[c.canal] || c.canal)}<small>${c.canal === "painel" ? "pelo simulador, direto na API" : "pelo webhook do n8n"}</small></dd></div>
-      <div><dt>Quem analisou</dt><dd>${origem}</dd></div>
-      <div><dt>Base da resposta</dt><dd>${c.analise.trecho_regimento ? "Regimento interno<small>trecho citado na conversa</small>" : "Análise do pedido<small>sem regra específica do regimento</small>"}</dd></div>
-    </dl>
+    <div class="origem-linha">
+      <p>Chegou por <strong>${esc(CANAIS[c.canal] || c.canal)}</strong>${c.canal === "painel" ? " direto na API" : " pelo n8n"} e foi analisado <strong>${quem}</strong>.
+      ${usadas.size ? `Resposta baseada em <strong>${esc((analise.fontes || []).map((f) => f.pergunta).join("; "))}</strong>.` : "A resposta não usou a base de perguntas frequentes."}</p>
+      <details><summary>Ver o que a IA consultou</summary>
+        <p>A IA só pode responder com a base de perguntas frequentes. Estas foram as entradas mais parecidas com a mensagem:</p>
+        ${baseHtml}${descartadas}
+      </details>
+    </div>
 
     <div class="conversa" id="conversa">${eventos.map((e) => eventoHtml(e, c)).join("")}</div>
 
     <div class="acoes">
       <div class="acoes-botoes">${botoesHtml(c)}</div>
       <div class="compositor${estado.tipoComposicao === "nota_interna" ? " nota" : ""}" id="compositor">
-        <div class="comp-abas" role="tablist">
-          <button class="comp-aba${estado.tipoComposicao === "resposta_morador" ? " ativa" : ""}" data-tipo="resposta_morador" role="tab">Responder ao morador</button>
-          <button class="comp-aba${estado.tipoComposicao === "nota_interna" ? " ativa" : ""}" data-tipo="nota_interna" role="tab">Nota interna</button>
-          <button class="comp-aba${estado.tipoComposicao === "mensagem_morador" ? " ativa" : ""}" data-tipo="mensagem_morador" role="tab" title="Para testar: simula o morador respondendo">Morador respondeu</button>
+        <div class="comp-abas" role="group" aria-label="Tipo de mensagem">
+          <button type="button" class="comp-aba${estado.tipoComposicao === "resposta_morador" ? " ativa" : ""}" data-tipo="resposta_morador" aria-pressed="${estado.tipoComposicao === "resposta_morador"}">Responder ao morador</button>
+          <button type="button" class="comp-aba${estado.tipoComposicao === "nota_interna" ? " ativa" : ""}" data-tipo="nota_interna" aria-pressed="${estado.tipoComposicao === "nota_interna"}">Nota interna</button>
         </div>
-        <textarea id="comp-texto" rows="2" maxlength="2000" aria-label="Texto"></textarea>
+        <label for="comp-texto" class="sr-only" id="comp-rotulo">Mensagem</label>
+        <textarea id="comp-texto" rows="2" maxlength="2000"></textarea>
         <div class="comp-rodape">
           <div class="exemplos" id="prontas"></div>
           <button class="btn btn-verde" type="button" id="comp-enviar">Enviar</button>
@@ -271,7 +295,7 @@ function eventoHtml(e, c) {
       return `<div class="ev ev-sistema ev-analise"><span class="icone" aria-hidden="true">✦</span>
         <div><strong>${esc(e.texto)}</strong><br>${extras}
         ${d.transcricao_anexo ? `<div class="trecho">Anexo: ${esc(d.transcricao_anexo)}</div>` : ""}
-        ${d.trecho_regimento ? `<div class="trecho">Regimento: “${esc(d.trecho_regimento)}”</div>` : ""}</div>
+        ${(d.fontes || []).length ? `<div class="trecho">Base usada: ${esc(d.fontes.map((f) => f.pergunta).join("; "))}${d.trecho_regimento ? `<br>Regimento: “${esc(d.trecho_regimento)}”` : ""}</div>` : ""}</div>
         <span class="ev-hora">${h}</span></div>`;
     }
     case "alerta_setor":
@@ -307,12 +331,9 @@ function botoesHtml(c) {
 function atualizarCompositor(c) {
   const tipo = estado.tipoComposicao;
   $("#compositor").classList.toggle("nota", tipo === "nota_interna");
-  $("#comp-texto").placeholder = {
-    resposta_morador: `Mensagem para ${c.morador}`,
-    nota_interna: "Anotação para a equipe (o morador não vê)",
-    mensagem_morador: `Escreva como se fosse ${c.morador} respondendo`,
-  }[tipo];
-  $("#comp-enviar").textContent = { resposta_morador: "Enviar ao morador", nota_interna: "Salvar nota", mensagem_morador: "Registrar resposta" }[tipo];
+  $("#comp-texto").placeholder = tipo === "nota_interna" ? "Anotação para a equipe (o morador não vê)" : `Mensagem para ${c.morador}`;
+  $("#comp-rotulo").textContent = tipo === "nota_interna" ? "Nota interna" : `Mensagem para ${c.morador}`;
+  $("#comp-enviar").textContent = tipo === "nota_interna" ? "Salvar nota" : "Enviar ao morador";
   const prontas = tipo === "resposta_morador" ? (RESPOSTAS_PRONTAS[c.analise.categoria] || RESPOSTAS_PRONTAS.padrao) : [];
   $("#prontas").innerHTML = prontas.map((t) => `<button type="button" class="chip" data-pronta="${esc(t)}">${esc(t)}</button>`).join("");
 }
@@ -321,7 +342,7 @@ function ligarAcoes(c) {
   $("#voltar").addEventListener("click", () => { $("#central").classList.remove("vendo-detalhe"); estado.selecionado = null; });
   $$(".comp-aba").forEach((b) => b.addEventListener("click", () => {
     estado.tipoComposicao = b.dataset.tipo;
-    $$(".comp-aba").forEach((x) => x.classList.toggle("ativa", x === b));
+    $$(".comp-aba").forEach((x) => { x.classList.toggle("ativa", x === b); x.setAttribute("aria-pressed", x === b); });
     atualizarCompositor(c);
     $("#comp-texto").focus();
   }));
@@ -332,10 +353,9 @@ function ligarAcoes(c) {
   $("#comp-enviar").addEventListener("click", () => executar(async () => {
     const texto = $("#comp-texto").value.trim();
     if (!texto) { $("#comp-texto").focus(); throw new Error("Escreva a mensagem antes de enviar."); }
-    const quem = estado.tipoComposicao === "mensagem_morador" ? c.morador : autor();
-    await post(`/chamados/${c.id}/interacoes`, { tipo: estado.tipoComposicao, autor: quem, texto });
+    await post(`/chamados/${c.id}/interacoes`, { tipo: estado.tipoComposicao, autor: autor(), texto });
     $("#comp-texto").value = "";
-    return { resposta_morador: "Resposta enviada ao morador.", nota_interna: "Nota salva.", mensagem_morador: "Resposta do morador registrada." }[estado.tipoComposicao];
+    return estado.tipoComposicao === "nota_interna" ? "Nota salva." : "Resposta enviada ao morador.";
   }));
 
   $$("[data-acao]").forEach((b) => b.addEventListener("click", () => {
@@ -418,8 +438,12 @@ function abrirMudar(c, campo) {
 }
 
 // ------------------------------------------------------------------ simulador do morador
-function abrirSimulador() {
+async function abrirSimulador() {
   $("#sim-resultado").hidden = true;
+  // Inclui resolvidos: se o morador responder um chamado encerrado, ele reabre
+  const recentes = await api("/chamados?limite=50").catch(() => []);
+  $("#chamado-existente").innerHTML = '<option value="">Não, é uma mensagem nova</option>' + recentes
+    .map((c) => `<option value="${c.id}">Chamado ${c.id}: ${esc(c.morador)}${c.apartamento ? ` (${esc(c.apartamento)})` : ""}, ${STATUS[c.status].toLowerCase()}</option>`).join("");
   $("#simulador").showModal();
   $("#texto").focus();
 }
@@ -471,6 +495,16 @@ $("#form-msg").addEventListener("submit", async (e) => {
     <p class="dica">${modo === "n8n" ? "O n8n recebeu e chamou a API." : "A API recebeu."} Se precisar da IA, a resposta pode levar alguns segundos.</p>`;
   const inicio = performance.now();
   try {
+    const existente = Number($("#chamado-existente").value);
+    if (existente) {
+      await post(`/chamados/${existente}/interacoes`, { tipo: "mensagem_morador", autor: dados.morador, texto: dados.texto });
+      res.innerHTML = `<p class="dica">Mensagem adicionada à conversa do chamado ${existente}.
+        <button class="link" type="button" id="ver-chamado">Ver na central</button></p>`;
+      $("#ver-chamado").addEventListener("click", () => { $("#simulador").close(); abrirChamado(existente); });
+      $("#texto").value = "";
+      await atualizar({ rolar: false });
+      return;
+    }
     const id = modo === "n8n" ? await enviarPeloN8n(dados) : (await post("/mensagens", dados)).id;
     const c = await api(`/chamados/${id}`);
     const seg = ((performance.now() - inicio) / 1000).toFixed(1);
@@ -483,7 +517,7 @@ $("#form-msg").addEventListener("submit", async (e) => {
     $("#texto").value = "";
     await atualizar({ rolar: false });
   } catch (err) {
-    res.innerHTML = `<div class="erro"><strong>A mensagem não foi processada.</strong>${esc(err.message)}</div>`;
+    res.innerHTML = `<div class="erro" role="alert"><strong>A mensagem não foi processada.</strong>${esc(err.message)}</div>`;
   } finally {
     btn.disabled = false;
     btn.textContent = "Enviar mensagem";
@@ -531,7 +565,10 @@ async function atualizar({ rolar = false } = {}) {
     await Promise.all([carregarCaixas(), carregarFila()]);
     // Não redesenha a conversa enquanto alguém digita ou usa uma janela
     const digitando = document.activeElement?.id === "comp-texto";
-    if (estado.selecionado && !$("dialog[open]") && (rolar || !digitando)) await abrirChamado(estado.selecionado, { rolar });
+    const focoNoDetalhe = $("#detalhe").contains(document.activeElement);
+    if (estado.selecionado && !$("dialog[open]") && (rolar || (!digitando && !focoNoDetalhe))) {
+      await abrirChamado(estado.selecionado, { rolar, forcar: rolar });
+    }
   } catch (err) {
     console.error(err);
   }

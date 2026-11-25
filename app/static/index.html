@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <a class="pular" href="#lista">Pular para a fila de chamados</a>
   <header class="topo">
     <div class="marca">
       <span class="placa placa-logo" aria-hidden="true">SI</span>
@@ -28,11 +29,11 @@
           <option>Administração — Marta</option>
         </select>
       </label>
-      <button id="abrir-simulador" class="btn btn-latao" type="button">Simular morador</button>
+      <button id="abrir-simulador" class="btn btn-latao" type="button" aria-haspopup="dialog">Simular morador</button>
     </div>
   </header>
 
-  <div class="central" id="central">
+  <main class="central" id="central">
     <!-- Caixas por setor e indicadores -->
     <nav class="caixas" aria-label="Caixas por setor">
       <ul id="lista-caixas"></ul>
@@ -48,13 +49,13 @@
     <section class="fila" aria-labelledby="t-fila">
       <div class="fila-topo">
         <h2 id="t-fila">Todos os setores</h2>
-        <div class="abas" role="tablist" aria-label="Situação">
-          <button role="tab" class="aba ativa" data-filtro="pendentes" aria-selected="true">Pendentes</button>
-          <button role="tab" class="aba" data-filtro="resolvidos" aria-selected="false">Resolvidos</button>
-          <button role="tab" class="aba" data-filtro="todos" aria-selected="false">Todos</button>
+        <div class="abas" role="group" aria-label="Mostrar chamados">
+          <button type="button" class="aba ativa" data-filtro="pendentes" aria-pressed="true">Pendentes</button>
+          <button type="button" class="aba" data-filtro="resolvidos" aria-pressed="false">Resolvidos</button>
+          <button type="button" class="aba" data-filtro="todos" aria-pressed="false">Todos</button>
         </div>
       </div>
-      <ul id="lista" class="lista" aria-live="polite"></ul>
+      <ul id="lista" class="lista" tabindex="-1" aria-labelledby="t-fila"></ul>
       <div id="fila-vazia" class="vazio" hidden></div>
     </section>
 
@@ -66,7 +67,8 @@
       </div>
       <div id="detalhe-conteudo" hidden></div>
     </section>
-  </div>
+  </main>
+  <div id="anuncio" class="sr-only" role="status" aria-live="polite"></div>
 
   <!-- Simulador do morador -->
   <dialog id="simulador" class="dlg dlg-simulador" aria-labelledby="t-sim">
@@ -90,6 +92,9 @@
       </div>
       <label>Mensagem
         <textarea id="texto" rows="3" maxlength="4000" required placeholder="Escreva como um morador escreveria"></textarea>
+      </label>
+      <label>Responder a um chamado já aberto (opcional)
+        <select id="chamado-existente"><option value="">Não, é uma mensagem nova</option></select>
       </label>
       <div class="exemplos" aria-label="Mensagens de exemplo">
         <button type="button" class="chip" data-txt="Socorro, tem cheiro de gás forte no corredor do 3º andar!">Cheiro de gás</button>

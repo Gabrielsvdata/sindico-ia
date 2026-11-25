@@ -36,7 +36,8 @@ class AnaliseIA(BaseModel):
     sentimento: Sentimento
     resumo: str = Field(..., max_length=300, description="Uma frase descrevendo o pedido")
     resposta_morador: str = Field(..., max_length=1200, description="Mensagem a ser enviada ao morador")
-    respondido_pelo_regimento: bool = Field(..., description="True se a resposta resolve a dúvida usando o regimento")
+    respondido_pelo_regimento: bool = Field(..., description="True se a resposta resolve a dúvida usando a base do FAQ")
+    fontes: list[str] = Field(default_factory=list, max_length=5, description="Ids das entradas do FAQ usadas na resposta")
     trecho_regimento: Optional[str] = Field(None, max_length=500, description="Trecho do regimento usado")
     transcricao_anexo: Optional[str] = Field(None, max_length=2000, description="Transcrição do áudio ou descrição da foto")
     confianca: float = Field(..., ge=0, le=1)

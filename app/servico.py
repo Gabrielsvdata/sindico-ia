@@ -5,7 +5,8 @@ A IA interpreta a mensagem; a DECISÃO de ação é feita aqui, em código, de f
 
 from . import config, db
 from .ai import analisar_mensagem, modelo_usado, normalizar
-from .faq import analise_da_faq, buscar_faq, chave_cache
+from .faq import analise_da_faq, buscar_faq, carregar_faq, chave_cache
+from .rag import buscar as buscar_na_base
 from .schemas import AnaliseIA, Chamado, MensagemEntrada
 
 ROTULO_PRIORIDADE = {"baixa": "Baixa", "media": "Média", "alta": "Alta", "critica": "Crítica"}
@@ -15,6 +16,9 @@ ROTULO_CATEGORIA = {
     "financeiro": "financeiro", "seguranca": "segurança", "reclamacao": "reclamação", "outros": "outros",
 }
 ROTULO_ORIGEM = {"faq": "perguntas frequentes (sem IA)", "cache": "resposta já dada antes (sem IA)", "ia": "IA"}
+
+
+PERGUNTAS = {item["id"]: item["pergunta"] for item in carregar_faq()}
 
 
 class ErroRegra(Exception):
@@ -65,20 +69,45 @@ def parece_emergencia(texto: str) -> bool:
     return any(p in t for p in PALAVRAS_EMERGENCIA)
 
 
-def obter_analise(msg: MensagemEntrada) -> tuple[AnaliseIA, str]:
-    """Tenta responder sem IA (FAQ, depois cache). Emergências e anexos vão sempre para a IA."""
+def validar_fontes(analise: AnaliseIA, trechos: list) -> tuple[AnaliseIA, list[str]]:
+    """Anti-alucinação: a IA só pode citar entradas que o RAG entregou a ela.
+
+    - Fontes que não estavam no contexto são descartadas.
+    - Se a IA diz que respondeu a dúvida mas não citou nenhuma fonte válida, a resposta não é
+      considerada resolvida: vira chamado para um humano conferir.
+    - A citação mostrada ao morador vem do texto oficial do FAQ, nunca de algo escrito pela IA.
+    """
+    permitidas = {t.id: t for t in trechos}
+    validas = [f for f in analise.fontes if f in permitidas]
+    descartadas = [f for f in analise.fontes if f not in permitidas]
+    mudancas = {"fontes": validas, "trecho_regimento": permitidas[validas[0]].trecho_regimento if validas else None}
+    if analise.respondido_pelo_regimento and not validas:
+        mudancas["respondido_pelo_regimento"] = False
+    return analise.model_copy(update=mudancas), descartadas
+
+
+def obter_analise(msg: MensagemEntrada) -> tuple[AnaliseIA, str, dict]:
+    """Ordem: FAQ exato (sem IA) -> cache (sem IA) -> RAG + IA. Emergências e anexos vão direto para a IA."""
     if not parece_emergencia(msg.texto) and not msg.anexo_base64:
         item = buscar_faq(msg.texto)
         if item:
-            return analise_da_faq(item, msg.texto), "faq"
+            return analise_da_faq(item, msg.texto), "faq", {"consultadas": [{"id": item["id"], "pergunta": item["pergunta"], "score": None}]}
         guardada = db.buscar_cache(chave_cache(msg.texto), config.CACHE_DIAS)
         if guardada:
-            return guardada, "cache"
-    return analisar_mensagem(msg), "ia"
+            return guardada, "cache", {"consultadas": []}
+
+    trechos = buscar_na_base(msg.texto)
+    analise = analisar_mensagem(msg, trechos)
+    analise, descartadas = validar_fontes(analise, trechos)
+    rag = {
+        "consultadas": [{"id": t.id, "pergunta": t.pergunta, "score": t.score} for t in trechos],
+        "descartadas": descartadas,
+    }
+    return analise, "ia", rag
 
 
 def processar_mensagem(msg: MensagemEntrada) -> dict:
-    analise, origem = obter_analise(msg)
+    analise, origem, rag = obter_analise(msg)
     analise, regra = aplicar_guarda_corpo(msg.texto, analise)
     acao = decidir_acao(analise)
     status = "resolvido" if acao == "responder_automaticamente" else "aberto"
@@ -98,7 +127,7 @@ def processar_mensagem(msg: MensagemEntrada) -> dict:
         regra_seguranca=regra,
         origem=origem,
     )
-    registrar_historico_inicial(chamado, origem, modelo_usado.get() if origem == "ia" else "")
+    registrar_historico_inicial(chamado, origem, modelo_usado.get() if origem == "ia" else "", rag)
     return {
         **chamado.model_dump(mode="json"),
         # Campos "achatados" para facilitar o uso no n8n
@@ -113,7 +142,7 @@ def processar_mensagem(msg: MensagemEntrada) -> dict:
 
 # ---------------------------------------------------------------- Histórico
 
-def registrar_historico_inicial(chamado: Chamado, origem: str, modelo: str) -> None:
+def registrar_historico_inicial(chamado: Chamado, origem: str, modelo: str, rag: dict | None = None) -> None:
     """Grava a conversa: o que chegou, o que foi entendido, o que foi respondido e quem foi avisado."""
     a = chamado.analise
     apto = f" (apto {chamado.apartamento})" if chamado.apartamento else ""
@@ -130,6 +159,9 @@ def registrar_historico_inicial(chamado: Chamado, origem: str, modelo: str) -> N
             "sentimento": a.sentimento, "trecho_regimento": a.trecho_regimento,
             "guarda_corpo": chamado.regra_seguranca_aplicada, "resumo": a.resumo,
             "transcricao_anexo": a.transcricao_anexo,
+            "fontes": [{"id": f, "pergunta": PERGUNTAS.get(f, f)} for f in a.fontes],
+            "base_consultada": (rag or {}).get("consultadas", []),
+            "fontes_descartadas": (rag or {}).get("descartadas", []),
         },
     )
     db.registrar_evento(chamado.id, "resposta_morador", "Síndico IA (automática)", a.resposta_morador,
