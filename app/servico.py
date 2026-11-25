@@ -3,8 +3,9 @@
 A IA interpreta a mensagem; a DECISÃO de ação é feita aqui, em código, de forma previsível.
 """
 
-from . import db
+from . import config, db
 from .ai import analisar_mensagem, normalizar
+from .faq import analise_da_faq, buscar_faq, chave_cache
 from .schemas import AnaliseIA, Chamado, MensagemEntrada
 
 # Guarda-corpo: se a mensagem tiver estes termos, é emergência mesmo que a IA erre.
@@ -47,11 +48,32 @@ def montar_notificacao(chamado: Chamado) -> str:
     return "\n".join(linhas)
 
 
+def parece_emergencia(texto: str) -> bool:
+    t = normalizar(texto)
+    return any(p in t for p in PALAVRAS_EMERGENCIA)
+
+
+def obter_analise(msg: MensagemEntrada) -> tuple[AnaliseIA, str]:
+    """Tenta responder sem IA (FAQ, depois cache). Emergências e anexos vão sempre para a IA."""
+    if not parece_emergencia(msg.texto) and not msg.anexo_base64:
+        item = buscar_faq(msg.texto)
+        if item:
+            return analise_da_faq(item, msg.texto), "faq"
+        guardada = db.buscar_cache(chave_cache(msg.texto), config.CACHE_DIAS)
+        if guardada:
+            return guardada, "cache"
+    return analisar_mensagem(msg), "ia"
+
+
 def processar_mensagem(msg: MensagemEntrada) -> dict:
-    analise = analisar_mensagem(msg)
+    analise, origem = obter_analise(msg)
     analise, regra = aplicar_guarda_corpo(msg.texto, analise)
     acao = decidir_acao(analise)
     status = "resolvido" if acao == "responder_automaticamente" else "aberto"
+
+    # Só guarda no cache respostas genéricas, que servem para qualquer morador
+    if origem == "ia" and acao == "responder_automaticamente" and not msg.anexo_base64:
+        db.salvar_cache(chave_cache(msg.texto), analise)
 
     chamado = db.criar_chamado(
         morador=msg.morador,
@@ -62,6 +84,7 @@ def processar_mensagem(msg: MensagemEntrada) -> dict:
         status=status,
         analise=analise,
         regra_seguranca=regra,
+        origem=origem,
     )
     return {
         **chamado.model_dump(mode="json"),
@@ -70,5 +93,6 @@ def processar_mensagem(msg: MensagemEntrada) -> dict:
         "setor": analise.setor,
         "categoria": analise.categoria,
         "resposta_morador": analise.resposta_morador,
+        "origem": origem,
         "notificacao_setor": montar_notificacao(chamado),
     }

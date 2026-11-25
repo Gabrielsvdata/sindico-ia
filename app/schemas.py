@@ -11,6 +11,8 @@ Setor = Literal["zeladoria", "portaria", "administracao", "sindico"]
 Sentimento = Literal["positivo", "neutro", "negativo"]
 Acao = Literal["responder_automaticamente", "abrir_chamado", "emergencia"]
 Status = Literal["aberto", "em_andamento", "resolvido"]
+# De onde veio a análise: perguntas frequentes, resposta já dada antes, ou o modelo de IA
+Origem = Literal["faq", "cache", "ia"]
 
 
 class MensagemEntrada(BaseModel):
@@ -51,6 +53,7 @@ class Chamado(BaseModel):
     status: Status
     analise: AnaliseIA
     regra_seguranca_aplicada: bool = False
+    origem: Origem = "ia"
 
 
 class AtualizarStatus(BaseModel):

@@ -30,7 +30,9 @@ O projeto tem como base o **caso 4.1 — Classificação de Mensagens** e o ampl
 flowchart LR
     M[📱 Morador] -->|mensagem| W[n8n<br/>Webhook]
     W --> API[FastAPI<br/>POST /mensagens]
-    API --> IA[🤖 Gemini<br/>prompt + regimento]
+    API --> F{FAQ ou cache<br/>já sabe responder?}
+    F -->|sim, sem IA| G
+    F -->|não| IA[🤖 Gemini<br/>prompt + regimento]
     IA -->|JSON| V{Validação<br/>Pydantic}
     V -->|inválido| IA
     V -->|válido| G[Guarda-corpo<br/>de emergência]
@@ -55,6 +57,12 @@ flowchart LR
 - **Validação com nova tentativa automática.** Todo JSON da IA passa pelo Pydantic. Se vier inválido, o erro é devolvido à IA, que tenta de novo (até 3 vezes).
 - **Respostas fundamentadas.** O prompt proíbe inventar regras. A IA só responde com o que está no regimento e indica o trecho usado.
 - **Proteção contra prompt injection.** A mensagem do morador vai delimitada por `<mensagem>`, e a IA é instruída a ignorar ordens escritas ali dentro.
+- **Economia de IA (FAQ + cache).** Antes de chamar o modelo, a API tenta responder sozinha:
+  1. **FAQ local** (`data/faq.json`): as 12 dúvidas mais comuns (piscina, mudança, boleto…) são reconhecidas por palavras-chave e respondidas na hora.
+  2. **Cache:** se uma pergunta já foi respondida pela IA nos últimos 7 dias, a mesma resposta é reaproveitada.
+
+  Reclamações ("meu boleto veio **errado**"), mensagens que citam vizinhos, textos longos e **qualquer emergência** sempre vão para a IA. Problemas específicos de um morador (como um vazamento) nunca entram no cache. Cada resposta informa a `origem` (`faq`, `cache` ou `ia`), e `/metricas` mostra quantas chamadas de IA foram economizadas.
+- **Resistência a instabilidade.** Se o Gemini estiver sobrecarregado (429/503) ou lento, a API tenta de novo e pode usar modelos reserva (`GEMINI_MODELOS_RESERVA`).
 - **Escalonamento.** Um fluxo do n8n verifica a cada 10 minutos se algum chamado crítico está parado há mais de 30 minutos e alerta o síndico.
 
 ## 4. Tecnologias Utilizadas
@@ -130,7 +138,7 @@ A API monta o prompt (`app/prompts.py`) com as **regras de classificação**, o 
 | `PATCH` | `/chamados/{id}` | Atualiza o status (`aberto`, `em_andamento`, `resolvido`) |
 | `GET` | `/chamados/criticos-parados?minutos=30` | Usado no escalonamento |
 | `GET` | `/resumo-diario` | Resumo do dia gerado pela IA |
-| `GET` | `/metricas` | Contagem por categoria, prioridade, setor, status e ação |
+| `GET` | `/metricas` | Contagem por categoria, prioridade, setor, status, ação e origem, além das chamadas de IA economizadas |
 
 A documentação interativa fica em **http://localhost:8000/docs**.
 
@@ -185,7 +193,7 @@ Em outro terminal, rode o n8n com `npx n8n`, importe os fluxos e **troque a URL 
 pytest -q
 ```
 
-Os testes usam o provedor `mock` e não gastam a cota da IA. Eles cobrem: emergência, resposta pelo regimento, abertura de chamado, guarda-corpo de segurança, nova tentativa com JSON inválido, escalonamento, resumo e métricas.
+Os testes usam o provedor `mock` e não gastam a cota da IA. Eles cobrem: emergência, resposta pelo regimento, abertura de chamado, guarda-corpo de segurança, nova tentativa com JSON inválido, sobrecarga do Gemini e modelo reserva, FAQ, cache, escalonamento, resumo e métricas.
 
 ### Sem chave de IA?
 Defina `AI_PROVIDER=mock` no `.env`. O sistema passa a funcionar com regras por palavra-chave, o que é útil para testar o fluxo do n8n.
@@ -234,13 +242,15 @@ Defina `AI_PROVIDER=mock` no `.env`. O sistema passa a funcionar com regras por 
 sindico-ia/
 ├── app/
 │   ├── main.py          # Rotas FastAPI
-│   ├── servico.py       # Regras de negócio: guarda-corpo e decisão da ação
+│   ├── servico.py       # Regras de negócio: FAQ/cache, guarda-corpo e decisão da ação
+│   ├── faq.py           # Respostas sem IA: perguntas frequentes e cache
 │   ├── ai.py            # Integração com o Gemini, validação e novas tentativas, provedor mock
 │   ├── prompts.py       # Prompts estruturados (versionados)
 │   ├── schemas.py       # Modelos Pydantic (entrada, análise da IA, chamado)
 │   ├── db.py            # Persistência em SQLite
 │   └── config.py        # Variáveis de ambiente
 ├── data/regimento.md    # Base de conhecimento usada pela IA
+├── data/faq.json        # Perguntas frequentes respondidas sem IA
 ├── n8n/                 # Fluxos exportados (JSON)
 ├── exemplos/            # Mensagens de exemplo + script de teste
 ├── docs/prints/         # Capturas de tela do n8n

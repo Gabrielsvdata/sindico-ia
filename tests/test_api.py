@@ -157,3 +157,82 @@ def test_timeout_passa_para_modelo_reserva(monkeypatch):
     monkeypatch.setattr(ai.time, "sleep", lambda s: None)
     monkeypatch.setattr(ai.httpx, "post", post)
     assert ai._chamar_gemini("sys", [{"text": "oi"}]) == "{}"
+
+
+# ---------------------------------------------------------------- FAQ e cache (respostas sem IA)
+
+def proibir_ia(monkeypatch):
+    def falhar(msg):
+        raise AssertionError("A IA não deveria ter sido chamada")
+    monkeypatch.setattr("app.servico.analisar_mensagem", falhar)
+
+
+def test_faq_responde_sem_chamar_ia(client, monkeypatch):
+    proibir_ia(monkeypatch)
+    r = enviar(client, "Que horas a piscina abre?")
+    assert r["origem"] == "faq"
+    assert r["acao"] == "responder_automaticamente"
+    assert "terça a domingo" in r["resposta_morador"]
+
+
+def test_reclamacao_nao_cai_no_faq(client):
+    r = enviar(client, "Meu boleto veio errado, onde resolvo isso?")
+    assert r["origem"] == "ia"
+
+
+def test_emergencia_nunca_usa_atalho(client):
+    # Fala de piscina e horário, mas tem fumaça: precisa ir para a IA e virar crítica
+    r = enviar(client, "Está saindo fumaça da casa de máquinas da piscina, que horas o zelador chega?")
+    assert r["origem"] == "ia"
+    assert r["prioridade"] == "critica"
+
+
+def test_cache_reaproveita_resposta_da_ia(client, monkeypatch):
+    chamadas = []
+    resposta = AnaliseIA(
+        categoria="duvida", prioridade="baixa", setor="administracao", sentimento="neutro",
+        resumo="Dúvida sobre visitas", resposta_morador="Visitantes precisam ser autorizados pelo morador.",
+        respondido_pelo_regimento=True, trecho_regimento="Visitantes precisam ser autorizados.", confianca=0.9,
+    )
+    monkeypatch.setattr("app.servico.analisar_mensagem", lambda msg: chamadas.append(1) or resposta)
+
+    primeira = enviar(client, "Visita precisa ser autorizada?")
+    segunda = enviar(client, "visita precisa ser AUTORIZADA??")
+
+    assert (primeira["origem"], segunda["origem"]) == ("ia", "cache")
+    assert len(chamadas) == 1
+    m = client.get("/metricas").json()
+    assert m["chamadas_ia_economizadas"] == 1
+    assert m["percentual_sem_ia"] == 50.0
+
+
+def test_chamado_nao_vai_para_cache(client, monkeypatch):
+    """Problemas (ex.: vazamento) são específicos de cada morador: nunca reaproveitar."""
+    enviar(client, "Tem água vazando do teto da garagem")
+    r = enviar(client, "Tem água vazando do teto da garagem")
+    assert r["origem"] == "ia"
+
+
+@pytest.mark.parametrize("texto", [
+    "O vizinho fez festa até 3h, como pode isso?",
+    "meu vizinho reformando às 7h da manhã de domingo, pode isso?",
+    "a piscina está suja de novo",
+    "a academia está com a esteira quebrada",
+    "Chegou encomenda pra mim?",
+])
+def test_reclamacoes_e_pedidos_vao_para_ia(texto):
+    from app.faq import buscar_faq
+    assert buscar_faq(texto) is None
+
+
+@pytest.mark.parametrize("texto,esperado", [
+    ("Que horas abre a piscina?", "piscina_horario"),
+    ("vou me mudar sabado, precisa agendar?", "mudanca"),
+    ("Posso furar a parede no domingo?", "obra_horario"),
+    ("Quanto custa o salão de festas?", "salao_festas"),
+    ("onde tiro segunda via do boleto?", "boleto"),
+    ("qual dia passa a coleta de reciclável?", "reciclavel"),
+])
+def test_perguntas_frequentes_reconhecidas(texto, esperado):
+    from app.faq import buscar_faq
+    assert buscar_faq(texto)["id"] == esperado

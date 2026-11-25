@@ -23,7 +23,15 @@ CREATE TABLE IF NOT EXISTS chamados (
     setor TEXT NOT NULL,
     responsavel TEXT,
     regra_seguranca INTEGER NOT NULL DEFAULT 0,
-    analise_json TEXT NOT NULL
+    analise_json TEXT NOT NULL,
+    origem TEXT NOT NULL DEFAULT 'ia'
+);
+
+CREATE TABLE IF NOT EXISTS cache_respostas (
+    chave TEXT PRIMARY KEY,
+    analise_json TEXT NOT NULL,
+    criado_em TEXT NOT NULL,
+    usos INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -43,6 +51,10 @@ def conexao():
 def iniciar():
     with conexao() as con:
         con.executescript(SCHEMA)
+        # Bancos criados antes da coluna "origem" existir
+        colunas = {r["name"] for r in con.execute("PRAGMA table_info(chamados)")}
+        if "origem" not in colunas:
+            con.execute("ALTER TABLE chamados ADD COLUMN origem TEXT NOT NULL DEFAULT 'ia'")
 
 
 def agora() -> datetime:
@@ -61,18 +73,21 @@ def _para_chamado(row: sqlite3.Row) -> Chamado:
         status=row["status"],
         analise=AnaliseIA.model_validate_json(row["analise_json"]),
         regra_seguranca_aplicada=bool(row["regra_seguranca"]),
+        origem=row["origem"],
     )
 
 
-def criar_chamado(*, morador, apartamento, canal, texto, acao, status, analise: AnaliseIA, regra_seguranca: bool) -> Chamado:
+def criar_chamado(*, morador, apartamento, canal, texto, acao, status, analise: AnaliseIA, regra_seguranca: bool,
+                  origem: str = "ia") -> Chamado:
     ts = agora().isoformat()
     with conexao() as con:
         cur = con.execute(
             """INSERT INTO chamados (criado_em, atualizado_em, morador, apartamento, canal, texto, acao, status,
-                                     categoria, prioridade, setor, regra_seguranca, analise_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                     categoria, prioridade, setor, regra_seguranca, analise_json, origem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (ts, ts, morador, apartamento, canal, texto, acao, status,
-             analise.categoria, analise.prioridade, analise.setor, int(regra_seguranca), analise.model_dump_json()),
+             analise.categoria, analise.prioridade, analise.setor, int(regra_seguranca), analise.model_dump_json(),
+             origem),
         )
         row = con.execute("SELECT * FROM chamados WHERE id = ?", (cur.lastrowid,)).fetchone()
     return _para_chamado(row)
@@ -123,6 +138,29 @@ def do_dia(dia: str) -> list[Chamado]:
     return [_para_chamado(r) for r in rows]
 
 
+def buscar_cache(chave: str, dias: int) -> AnaliseIA | None:
+    if dias <= 0:
+        return None
+    limite = (agora() - timedelta(days=dias)).isoformat()
+    with conexao() as con:
+        row = con.execute(
+            "SELECT analise_json FROM cache_respostas WHERE chave = ? AND criado_em >= ?", (chave, limite)
+        ).fetchone()
+        if not row:
+            return None
+        con.execute("UPDATE cache_respostas SET usos = usos + 1 WHERE chave = ?", (chave,))
+    return AnaliseIA.model_validate_json(row["analise_json"])
+
+
+def salvar_cache(chave: str, analise: AnaliseIA) -> None:
+    with conexao() as con:
+        con.execute(
+            """INSERT INTO cache_respostas (chave, analise_json, criado_em) VALUES (?, ?, ?)
+               ON CONFLICT(chave) DO UPDATE SET analise_json = excluded.analise_json, criado_em = excluded.criado_em""",
+            (chave, analise.model_dump_json(), agora().isoformat()),
+        )
+
+
 def metricas() -> dict:
     with conexao() as con:
         total = con.execute("SELECT COUNT(*) FROM chamados").fetchone()[0]
@@ -137,4 +175,5 @@ def metricas() -> dict:
             "por_setor": agrupar("setor"),
             "por_status": agrupar("status"),
             "por_acao": agrupar("acao"),
+            "por_origem": agrupar("origem"),
         }

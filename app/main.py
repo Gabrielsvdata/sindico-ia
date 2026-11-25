@@ -104,4 +104,8 @@ def resumo_diario(dia: Optional[date] = None):
 
 @app.get("/metricas", tags=["relatórios"])
 def metricas():
-    return db.metricas()
+    m = db.metricas()
+    sem_ia = m["por_origem"].get("faq", 0) + m["por_origem"].get("cache", 0)
+    m["chamadas_ia_economizadas"] = sem_ia
+    m["percentual_sem_ia"] = round(100 * sem_ia / m["total"], 1) if m["total"] else 0.0
+    return m

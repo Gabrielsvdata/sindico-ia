@@ -1,0 +1,265 @@
+[
+  {
+    "id": "piscina_horario",
+    "pergunta": "Qual o horário da piscina?",
+    "palavras_chave": [
+      [
+        "piscina"
+      ],
+      [
+        "horario",
+        "abre",
+        "fecha",
+        "funciona",
+        "aberta",
+        "fechada",
+        "segunda",
+        "que horas"
+      ]
+    ],
+    "resposta": "A piscina funciona de terça a domingo, das 8h às 20h. Às segundas fica fechada para limpeza. Menores de 12 anos só com responsável.",
+    "trecho_regimento": "Piscina: aberta de terça a domingo, das 8h às 20h. Fechada às segundas para limpeza. Menores de 12 anos só com responsável.",
+    "setor": "administracao"
+  },
+  {
+    "id": "mudanca",
+    "pergunta": "Quando posso fazer mudança?",
+    "palavras_chave": [
+      [
+        "mudanca",
+        "mudar",
+        "mudando"
+      ]
+    ],
+    "resposta": "Mudanças são permitidas de segunda a sábado, das 8h às 18h, com agendamento na administração com pelo menos 48h de antecedência. Aos domingos não é permitido.",
+    "trecho_regimento": "Mudanças: segunda a sábado, das 8h às 18h, com agendamento prévio na administração (mínimo de 48h de antecedência). Proibidas aos domingos.",
+    "setor": "administracao"
+  },
+  {
+    "id": "obra_horario",
+    "pergunta": "Qual o horário permitido para obras?",
+    "palavras_chave": [
+      [
+        "obra",
+        "reforma",
+        "furar",
+        "furadeira",
+        "quebrar parede"
+      ],
+      [
+        "horario",
+        "pode",
+        "posso",
+        "permitid",
+        "quando",
+        "que horas",
+        "domingo",
+        "sabado",
+        "feriado"
+      ]
+    ],
+    "resposta": "Obras e reformas são permitidas de segunda a sexta, das 8h às 17h, e aos sábados das 9h às 13h. Domingos e feriados não são permitidas.",
+    "trecho_regimento": "Obras e reformas: segunda a sexta, das 8h às 17h; sábado, das 9h às 13h. Proibidas aos domingos e feriados.",
+    "setor": "administracao"
+  },
+  {
+    "id": "silencio_horario",
+    "pergunta": "Qual o horário de silêncio?",
+    "palavras_chave": [
+      [
+        "silencio",
+        "lei do silencio"
+      ],
+      [
+        "horario",
+        "que horas",
+        "qual",
+        "quando",
+        "a partir"
+      ]
+    ],
+    "resposta": "O horário de silêncio é das 22h às 8h de domingo a quinta, e das 23h às 9h na sexta, no sábado e em vésperas de feriado.",
+    "trecho_regimento": "Silêncio obrigatório: de domingo a quinta, das 22h às 8h; sexta, sábado e véspera de feriado, das 23h às 9h.",
+    "setor": "administracao"
+  },
+  {
+    "id": "salao_festas",
+    "pergunta": "Como reservo o salão de festas?",
+    "palavras_chave": [
+      [
+        "salao"
+      ],
+      [
+        "reserv",
+        "alugar",
+        "valor",
+        "quanto",
+        "taxa",
+        "custa",
+        "como",
+        "usar"
+      ]
+    ],
+    "resposta": "O salão de festas é reservado pelo aplicativo ou na administração, com até 30 dias de antecedência. A taxa é de R$ 150,00, cobrada no boleto do mês seguinte, e o uso vai até 23h.",
+    "trecho_regimento": "Salão de festas: reserva pelo aplicativo ou na administração, com até 30 dias de antecedência. Taxa de R$ 150,00 por uso, cobrada no boleto do mês seguinte. Uso até 23h.",
+    "setor": "administracao"
+  },
+  {
+    "id": "churrasqueira",
+    "pergunta": "Como reservo a churrasqueira?",
+    "palavras_chave": [
+      [
+        "churrasqueira",
+        "churrasco"
+      ],
+      [
+        "reserv",
+        "alugar",
+        "valor",
+        "quanto",
+        "taxa",
+        "custa",
+        "como",
+        "usar",
+        "pode"
+      ]
+    ],
+    "resposta": "A churrasqueira é reservada pelo aplicativo ou na administração, com até 30 dias de antecedência. A taxa é de R$ 80,00.",
+    "trecho_regimento": "Churrasqueira: reserva igual à do salão. Taxa de R$ 80,00.",
+    "setor": "administracao"
+  },
+  {
+    "id": "academia",
+    "pergunta": "Qual o horário da academia?",
+    "palavras_chave": [
+      [
+        "academia"
+      ],
+      [
+        "horario",
+        "abre",
+        "fecha",
+        "funciona",
+        "que horas",
+        "idade",
+        "menor",
+        "pode"
+      ]
+    ],
+    "resposta": "A academia funciona todos os dias, das 6h às 23h. O uso é proibido para menores de 16 anos.",
+    "trecho_regimento": "Academia: aberta todos os dias, das 6h às 23h. Proibida para menores de 16 anos.",
+    "setor": "administracao"
+  },
+  {
+    "id": "boleto",
+    "pergunta": "Como tiro a segunda via do boleto?",
+    "palavras_chave": [
+      [
+        "boleto",
+        "taxa condominial"
+      ],
+      [
+        "segunda via",
+        "2a via",
+        "2 via",
+        "vencimento",
+        "vence",
+        "onde",
+        "pegar",
+        "emitir",
+        "tirar"
+      ]
+    ],
+    "resposta": "A taxa condominial vence no dia 10 de cada mês. A segunda via do boleto está no aplicativo ou na administração (seg. a sex., das 9h às 17h). Em caso de atraso, há multa de 2% e juros de 1% ao mês.",
+    "trecho_regimento": "Vencimento da taxa condominial: dia 10 de cada mês. Atraso: multa de 2% e juros de 1% ao mês. Segunda via do boleto: pelo aplicativo ou na administração (seg. a sex., 9h às 17h).",
+    "setor": "administracao"
+  },
+  {
+    "id": "encomenda_prazo",
+    "pergunta": "Por quanto tempo a portaria guarda encomendas?",
+    "palavras_chave": [
+      [
+        "encomenda",
+        "pacote",
+        "entrega"
+      ],
+      [
+        "quanto tempo",
+        "quantos dias",
+        "prazo",
+        "guarda",
+        "fica",
+        "ate quando"
+      ]
+    ],
+    "resposta": "As encomendas ficam guardadas na portaria por até 7 dias. Você é avisado pelo interfone ou pelo aplicativo quando ela chega.",
+    "trecho_regimento": "Encomendas ficam guardadas na portaria por até 7 dias. O morador é avisado pelo interfone ou aplicativo.",
+    "setor": "portaria"
+  },
+  {
+    "id": "animais",
+    "pergunta": "Pode ter animal de estimação?",
+    "palavras_chave": [
+      [
+        "animal",
+        "animais",
+        "cachorro",
+        "gato",
+        "pet"
+      ],
+      [
+        "pode",
+        "posso",
+        "permitid",
+        "regra",
+        "coleira",
+        "piscina",
+        "parquinho"
+      ]
+    ],
+    "resposta": "Animais de estimação são permitidos. Nas áreas comuns, eles devem estar na coleira ou no colo, e não podem usar a piscina nem o parquinho.",
+    "trecho_regimento": "Animais de estimação são permitidos. Nas áreas comuns, devem estar na coleira ou no colo. Animais não podem usar a piscina nem o parquinho.",
+    "setor": "administracao"
+  },
+  {
+    "id": "reciclavel",
+    "pergunta": "Quando é a coleta de recicláveis?",
+    "palavras_chave": [
+      [
+        "lixo",
+        "reciclave",
+        "reciclage",
+        "coleta"
+      ],
+      [
+        "quando",
+        "dia",
+        "dias",
+        "onde",
+        "horario",
+        "como"
+      ]
+    ],
+    "resposta": "O lixo orgânico vai nas lixeiras do térreo, todos os dias. A coleta de recicláveis é às terças e sextas: separe papel, plástico, metal e vidro.",
+    "trecho_regimento": "Lixo orgânico: lixeiras do térreo, todos os dias. Recicláveis: coleta às terças e sextas. Separar papel, plástico, metal e vidro.",
+    "setor": "zeladoria"
+  },
+  {
+    "id": "lavar_carro",
+    "pergunta": "Posso lavar o carro na garagem?",
+    "palavras_chave": [
+      [
+        "lavar",
+        "lavagem"
+      ],
+      [
+        "carro",
+        "moto",
+        "veiculo"
+      ]
+    ],
+    "resposta": "Não é permitido lavar carros na garagem. Lembre também que a velocidade máxima na garagem é de 10 km/h.",
+    "trecho_regimento": "Velocidade máxima de 10 km/h. É proibido lavar carros na garagem.",
+    "setor": "administracao"
+  }
+]
