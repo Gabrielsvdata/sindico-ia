@@ -6,6 +6,7 @@ from typing import Optional
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -36,6 +37,14 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+if config.CORS_ORIGENS_REGEX:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=config.CORS_ORIGENS_REGEX,
+        allow_methods=["GET", "POST", "PATCH"],
+        allow_headers=["Content-Type"],
+    )
 
 
 STATIC_DIR = Path(__file__).parent / "static"

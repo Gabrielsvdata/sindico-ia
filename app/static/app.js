@@ -56,8 +56,10 @@ const ico = (nome) => `<svg class="ico" aria-hidden="true" focusable="false"><us
 function esc(t) { const d = document.createElement("div"); d.textContent = t ?? ""; return d.innerHTML; }
 const autor = () => $("#atuando").value;
 
+const API_URL = (window.SINDICO_API_URL || "").replace(/\/$/, "");
+
 async function api(caminho, opcoes = {}) {
-  const r = await fetch(caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+  const r = await fetch(API_URL + caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
   const corpo = await r.json().catch(() => ({}));
   if (!r.ok) {
     const d = corpo.detail;

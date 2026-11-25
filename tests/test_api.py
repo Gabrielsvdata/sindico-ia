@@ -242,3 +242,25 @@ def test_limite_diario_de_ia(client, monkeypatch):
     # Perguntas do FAQ não gastam IA e continuam funcionando
     assert client.post("/mensagens", json={"texto": "Que horas abre a piscina?"}).status_code == 200
     assert client.get("/health").json()["uso_ia_hoje"] == 1
+
+
+def test_cors_libera_so_a_central_da_vercel(tmp_path, monkeypatch):
+    """Com CORS_ORIGENS_REGEX, a central na Vercel pode chamar a API; outros sites não."""
+    import importlib
+    from fastapi.testclient import TestClient
+    monkeypatch.setenv("CORS_ORIGENS_REGEX", r"^https://sindico-ia[a-z0-9-]*\.vercel\.app$")
+    monkeypatch.setenv("AI_PROVIDER", "mock")
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "cors.db"))
+    import app.config, app.main
+    importlib.reload(app.config)
+    try:
+        importlib.reload(app.main)
+        with TestClient(app.main.app) as c:
+            ok = c.get("/health", headers={"Origin": "https://sindico-ia.vercel.app"})
+            assert ok.headers.get("access-control-allow-origin") == "https://sindico-ia.vercel.app"
+            outro = c.get("/health", headers={"Origin": "https://site-qualquer.com"})
+            assert "access-control-allow-origin" not in outro.headers
+    finally:
+        monkeypatch.delenv("CORS_ORIGENS_REGEX")
+        importlib.reload(app.config)
+        importlib.reload(app.main)

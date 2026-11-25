@@ -25,6 +25,8 @@ services:
         value: "100"
       - key: N8N_WEBHOOK_URL
         sync: false            # ex.: https://sindico-ia-n8n.onrender.com/webhook/sindico
+      - key: CORS_ORIGENS_REGEX
+        value: ^https://sindico-ia[a-z0-9-]*\.vercel\.app$  # a central publicada na Vercel
       - key: DATABASE_PATH
         value: /tmp/sindico.db # plano gratuito: os dados somem quando o serviço reinicia
       - key: TZ
