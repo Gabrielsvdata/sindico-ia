@@ -95,3 +95,49 @@ def test_retry_quando_ia_devolve_json_invalido(monkeypatch):
     monkeypatch.setattr(ai, "_chamar_gemini", lambda system, partes: next(respostas))
     resultado = ai._gerar_validado("sys", [{"text": "oi"}], AnaliseIA)
     assert resultado.categoria == "duvida"
+
+
+class RespostaFalsa:
+    def __init__(self, status, corpo):
+        self.status_code = status
+        self.text = json.dumps(corpo)
+        self._corpo = corpo
+
+    def json(self):
+        return self._corpo
+
+
+def test_repete_quando_gemini_sobrecarregado(monkeypatch):
+    """503 na 1ª chamada: a API espera e tenta de novo, sem devolver erro ao n8n."""
+    ok = {"candidates": [{"content": {"parts": [{"text": '{"ok": true}'}]}}]}
+    respostas = iter([RespostaFalsa(503, {"error": "high demand"}), RespostaFalsa(200, ok)])
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "teste")
+    monkeypatch.setattr(ai.time, "sleep", lambda s: None)
+    monkeypatch.setattr(ai.httpx, "post", lambda *a, **k: next(respostas))
+    assert ai._chamar_gemini("sys", [{"text": "oi"}]) == '{"ok": true}'
+
+
+def test_usa_modelo_reserva(monkeypatch):
+    ok = {"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}
+    usados = []
+
+    def post(url, **k):
+        usados.append(url.split("/models/")[1].split(":")[0])
+        return RespostaFalsa(200, ok) if "reserva" in url else RespostaFalsa(503, {})
+
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "teste")
+    monkeypatch.setattr(config, "GEMINI_MODEL", "principal")
+    monkeypatch.setattr(config, "GEMINI_MODELOS_RESERVA", ["reserva"])
+    monkeypatch.setattr(ai.time, "sleep", lambda s: None)
+    monkeypatch.setattr(ai.httpx, "post", post)
+    ai._chamar_gemini("sys", [{"text": "oi"}])
+    assert usados == ["principal", "principal", "principal", "reserva"]
+
+
+def test_erro_definitivo_nao_repete(monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "teste")
+    monkeypatch.setattr(ai.httpx, "post", lambda *a, **k: chamadas.append(1) or RespostaFalsa(400, {"error": "key"}))
+    with pytest.raises(ai.ErroIA, match="400"):
+        ai._chamar_gemini("sys", [{"text": "oi"}])
+    assert len(chamadas) == 1

@@ -7,6 +7,7 @@ Dois provedores:
 
 import json
 import logging
+import time
 import unicodedata
 
 import httpx
@@ -19,6 +20,8 @@ from .schemas import AnaliseIA, MensagemEntrada
 log = logging.getLogger("sindico_ia.ai")
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+# Erros passageiros do Google: limite de uso (429) e sobrecarga (500, 503)
+STATUS_TEMPORARIOS = {429, 500, 503}
 
 
 class ErroIA(Exception):
@@ -46,15 +49,30 @@ def _chamar_gemini(system: str, partes: list[dict]) -> str:
         "contents": [{"role": "user", "parts": partes}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2},
     }
-    try:
-        resp = httpx.post(
-            GEMINI_URL.format(model=config.GEMINI_MODEL),
-            headers={"x-goog-api-key": config.GEMINI_API_KEY},
-            json=corpo,
-            timeout=60,
-        )
-    except httpx.HTTPError as e:
-        raise ErroIA(f"Falha de rede ao chamar o Gemini: {e}") from e
+    resp = None
+    # Tenta o modelo principal e depois os reservas; em cada um, repete se o Google estiver sobrecarregado.
+    for modelo in [config.GEMINI_MODEL, *config.GEMINI_MODELOS_RESERVA]:
+        for tentativa in range(config.AI_TENTATIVAS_SOBRECARGA):
+            try:
+                resp = httpx.post(
+                    GEMINI_URL.format(model=modelo),
+                    headers={"x-goog-api-key": config.GEMINI_API_KEY},
+                    json=corpo,
+                    timeout=60,
+                )
+            except httpx.HTTPError as e:
+                raise ErroIA(f"Falha de rede ao chamar o Gemini: {e}") from e
+
+            if resp.status_code not in STATUS_TEMPORARIOS:
+                break
+            espera = 2 ** (tentativa + 1)
+            log.warning("Gemini %s respondeu %s; nova tentativa em %ss", modelo, resp.status_code, espera)
+            if tentativa + 1 < config.AI_TENTATIVAS_SOBRECARGA:
+                time.sleep(espera)
+
+        if resp.status_code == 200 or resp.status_code not in STATUS_TEMPORARIOS:
+            break
+        log.warning("Modelo %s indisponível, tentando o próximo da lista", modelo)
 
     if resp.status_code != 200:
         raise ErroIA(f"Gemini respondeu {resp.status_code}: {resp.text[:300]}")
