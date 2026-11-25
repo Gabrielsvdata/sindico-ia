@@ -12,8 +12,12 @@ from fastapi.staticfiles import StaticFiles
 from . import config, db
 from .ai import ErroIA, resumir_chamados
 from .prompts import PROMPT_VERSAO
-from .schemas import AtualizarStatus, Chamado, MensagemEntrada, Prioridade, ResumoDiario, Status
-from .servico import processar_mensagem
+from .schemas import (
+    AtualizarStatus, Chamado, Encaminhar, Evento, MensagemEntrada, MudarPrioridade, NovaInteracao, Prioridade,
+    ResumoDiario, Setor, Status,
+)
+from . import servico
+from .servico import ErroRegra, processar_mensagem
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -59,9 +63,15 @@ def receber_mensagem(msg: MensagemEntrada):
 def listar_chamados(
     status: Optional[Status] = None,
     prioridade: Optional[Prioridade] = None,
+    setor: Optional[Setor] = None,
     limite: int = Query(100, ge=1, le=500),
 ):
-    return db.listar(status, prioridade, limite)
+    return db.listar(status, prioridade, setor, limite)
+
+
+@app.get("/caixas", tags=["chamados"], summary="Quantos chamados cada setor tem para atender agora")
+def caixas():
+    return db.caixas()
 
 
 @app.get("/chamados/criticos-parados", tags=["chamados"], response_model=list[Chamado],
@@ -78,12 +88,46 @@ def obter_chamado(chamado_id: int):
     return chamado
 
 
-@app.patch("/chamados/{chamado_id}", tags=["chamados"], response_model=Chamado)
-def mudar_status(chamado_id: int, body: AtualizarStatus):
-    chamado = db.atualizar_status(chamado_id, body.status, body.responsavel)
-    if not chamado:
+def _executar(acao, *args):
+    """Traduz erros de regra de negócio para respostas HTTP."""
+    try:
+        return acao(*args)
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from e
+    except ErroRegra as e:
+        raise HTTPException(409, str(e)) from e
+
+
+@app.get("/chamados/{chamado_id}/eventos", tags=["chamados"], response_model=list[Evento],
+         summary="Histórico completo: mensagem, análise, respostas, alertas e ações da equipe")
+def eventos(chamado_id: int):
+    if not db.buscar(chamado_id):
         raise HTTPException(404, "Chamado não encontrado")
-    return chamado
+    return db.listar_eventos(chamado_id)
+
+
+@app.patch("/chamados/{chamado_id}", tags=["chamados"], response_model=Chamado,
+           summary="Assumir, resolver (com descrição do que foi feito) ou reabrir")
+def mudar_status(chamado_id: int, body: AtualizarStatus):
+    return _executar(servico.mudar_status, chamado_id, body.status, body.responsavel, body.nota)
+
+
+@app.post("/chamados/{chamado_id}/interacoes", tags=["chamados"], response_model=Chamado,
+          summary="Responder ao morador, registrar nota interna ou nova mensagem do morador")
+def interagir(chamado_id: int, body: NovaInteracao):
+    return _executar(servico.registrar_interacao, chamado_id, body.tipo, body.autor, body.texto)
+
+
+@app.post("/chamados/{chamado_id}/encaminhar", tags=["chamados"], response_model=Chamado,
+          summary="Passar o chamado para outro setor (o novo setor é avisado)")
+def encaminhar(chamado_id: int, body: Encaminhar):
+    return _executar(servico.encaminhar, chamado_id, body.setor, body.autor, body.motivo)
+
+
+@app.post("/chamados/{chamado_id}/prioridade", tags=["chamados"], response_model=Chamado,
+          summary="Corrigir a prioridade definida pela IA")
+def mudar_prioridade(chamado_id: int, body: MudarPrioridade):
+    return _executar(servico.mudar_prioridade, chamado_id, body.prioridade, body.autor, body.motivo)
 
 
 @app.get("/resumo-diario", tags=["relatórios"], response_model=ResumoDiario,
@@ -95,8 +139,8 @@ def resumo_diario(dia: Optional[date] = None):
         {
             "id": c.id,
             "categoria": c.analise.categoria,
-            "prioridade": c.analise.prioridade,
-            "setor": c.analise.setor,
+            "prioridade": c.prioridade,
+            "setor": c.setor,
             "status": c.status,
             "resumo": c.analise.resumo,
         }
@@ -111,7 +155,7 @@ def resumo_diario(dia: Optional[date] = None):
         total_chamados=len(chamados),
         resumo=r.resumo,
         destaques=r.destaques,
-        pendencias_criticas=sum(1 for c in chamados if c.analise.prioridade == "critica" and c.status != "resolvido"),
+        pendencias_criticas=sum(1 for c in chamados if c.prioridade == "critica" and c.status != "resolvido"),
     )
 
 

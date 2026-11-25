@@ -1,26 +1,12 @@
 import json
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app import ai, config
 from app.schemas import AnaliseIA
 
 
-@pytest.fixture()
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "AI_PROVIDER", "mock")
-    monkeypatch.setattr(config, "DATABASE_PATH", str(tmp_path / "teste.db"))
-    from app.main import app
-
-    with TestClient(app) as c:
-        yield c
-
-
-def enviar(client, texto, **extra):
-    r = client.post("/mensagens", json={"texto": texto, "morador": "Ana", "apartamento": "302B", **extra})
-    assert r.status_code == 200, r.text
-    return r.json()
+from conftest import enviar
 
 
 def test_health(client):

@@ -42,9 +42,33 @@ class AnaliseIA(BaseModel):
     confianca: float = Field(..., ge=0, le=1)
 
 
+TipoEvento = Literal[
+    "mensagem_morador",   # o que o morador escreveu
+    "analise",            # o que a IA (ou o FAQ/cache) concluiu
+    "resposta_morador",   # o que foi enviado de volta ao morador
+    "alerta_setor",       # a notificação que o setor recebeu
+    "status",             # assumido, resolvido, reaberto
+    "nota_interna",       # anotação da equipe, o morador não vê
+    "encaminhamento",     # troca de setor
+    "prioridade",         # troca de prioridade
+]
+
+
+class Evento(BaseModel):
+    id: int
+    chamado_id: int
+    criado_em: datetime
+    tipo: TipoEvento
+    autor: str
+    destino: Optional[str] = None
+    texto: str
+    dados: dict = {}
+
+
 class Chamado(BaseModel):
     id: int
     criado_em: datetime
+    atualizado_em: datetime
     morador: str
     apartamento: Optional[str]
     canal: str
@@ -54,11 +78,37 @@ class Chamado(BaseModel):
     analise: AnaliseIA
     regra_seguranca_aplicada: bool = False
     origem: Origem = "ia"
+    # Estado atual (pode mudar depois da análise: encaminhamento, troca de prioridade)
+    setor: Setor
+    prioridade: Prioridade
+    responsavel: Optional[str] = None
+    resolvido_em: Optional[datetime] = None
+    prazo_em: datetime
+    atrasado: bool = False
 
 
 class AtualizarStatus(BaseModel):
     status: Status
-    responsavel: Optional[str] = None
+    responsavel: Optional[str] = Field(None, max_length=80)
+    nota: Optional[str] = Field(None, max_length=1000, description="Obrigatória ao resolver: o que foi feito")
+
+
+class NovaInteracao(BaseModel):
+    tipo: Literal["resposta_morador", "nota_interna", "mensagem_morador"]
+    autor: str = Field(..., min_length=1, max_length=80)
+    texto: str = Field(..., min_length=1, max_length=2000)
+
+
+class Encaminhar(BaseModel):
+    setor: Setor
+    autor: str = Field(..., min_length=1, max_length=80)
+    motivo: Optional[str] = Field(None, max_length=500)
+
+
+class MudarPrioridade(BaseModel):
+    prioridade: Prioridade
+    autor: str = Field(..., min_length=1, max_length=80)
+    motivo: Optional[str] = Field(None, max_length=500)
 
 
 class ResumoDiario(BaseModel):

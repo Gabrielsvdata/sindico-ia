@@ -7,6 +7,7 @@ Dois provedores:
 
 import json
 import logging
+from contextvars import ContextVar
 import time
 import unicodedata
 
@@ -27,6 +28,10 @@ STATUS_TEMPORARIOS = {429, 500, 503, 504}
 class RespostaTimeout:
     status_code = 504
     text = "O Gemini demorou demais para responder (tempo esgotado)."
+
+
+# Qual modelo respondeu de fato a última chamada (o principal ou um reserva)
+modelo_usado: ContextVar[str] = ContextVar("modelo_usado", default="")
 
 
 class ErroIA(Exception):
@@ -85,6 +90,7 @@ def _chamar_gemini(system: str, partes: list[dict]) -> str:
     if resp.status_code != 200:
         raise ErroIA(f"Gemini respondeu {resp.status_code}: {resp.text[:300]}")
 
+    modelo_usado.set(modelo)
     try:
         return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError, ValueError) as e:
@@ -171,6 +177,7 @@ def _analisar_mock(msg: MensagemEntrada) -> AnaliseIA:
 
 def analisar_mensagem(msg: MensagemEntrada) -> AnaliseIA:
     if config.AI_PROVIDER == "mock":
+        modelo_usado.set("mock")
         return _analisar_mock(msg)
 
     partes: list[dict] = [{"text": montar_mensagem_usuario(msg.texto, msg.morador, msg.apartamento)}]

@@ -3,113 +3,173 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Síndico IA — Central do Condomínio</title>
+  <title>Síndico IA — Central de atendimento</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="topo">
     <div class="marca">
-      <span class="logo" aria-hidden="true">🏢</span>
+      <span class="placa placa-logo" aria-hidden="true">SI</span>
       <div>
         <h1>Síndico IA</h1>
-        <p>Central de atendimento · Residencial Jardim das Palmeiras</p>
+        <p>Residencial Jardim das Palmeiras</p>
       </div>
     </div>
     <div class="topo-acoes">
-      <span id="status-api" class="pill pill-neutro">Conectando…</span>
-      <a class="link-discreto" href="/docs" target="_blank" rel="noopener">API docs ↗</a>
+      <span id="status-api" class="conexao" title="Situação da API">Conectando</span>
+      <label class="atuando">Você é
+        <select id="atuando">
+          <option>Síndico</option>
+          <option>Zelador João</option>
+          <option>Portaria — Carlos</option>
+          <option>Administração — Marta</option>
+        </select>
+      </label>
+      <button id="abrir-simulador" class="btn btn-latao" type="button">Simular morador</button>
     </div>
   </header>
 
-  <main class="grade">
-    <!-- Coluna esquerda: simulador do morador -->
-    <section class="cartao simulador" aria-labelledby="t-sim">
-      <div class="cartao-topo">
-        <h2 id="t-sim">Mensagem do morador</h2>
-        <div class="segmento" role="radiogroup" aria-label="Enviar por">
-          <button type="button" class="seg ativo" data-modo="n8n" role="radio" aria-checked="true">via n8n</button>
-          <button type="button" class="seg" data-modo="api" role="radio" aria-checked="false">direto na API</button>
+  <div class="central" id="central">
+    <!-- Caixas por setor e indicadores -->
+    <nav class="caixas" aria-label="Caixas por setor">
+      <ul id="lista-caixas"></ul>
+      <section class="indicadores" aria-label="Indicadores">
+        <div class="ind"><strong id="i-sem-ia">–</strong><span>respondidos sem IA</span></div>
+        <div class="ind"><strong id="i-tempo">–</strong><span>tempo médio para resolver</span></div>
+        <div class="ind"><strong id="i-total">–</strong><span>mensagens recebidas</span></div>
+        <button id="abrir-resumo" class="btn btn-contorno" type="button">Resumo do dia</button>
+      </section>
+    </nav>
+
+    <!-- Fila -->
+    <section class="fila" aria-labelledby="t-fila">
+      <div class="fila-topo">
+        <h2 id="t-fila">Todos os setores</h2>
+        <div class="abas" role="tablist" aria-label="Situação">
+          <button role="tab" class="aba ativa" data-filtro="pendentes" aria-selected="true">Pendentes</button>
+          <button role="tab" class="aba" data-filtro="resolvidos" aria-selected="false">Resolvidos</button>
+          <button role="tab" class="aba" data-filtro="todos" aria-selected="false">Todos</button>
         </div>
       </div>
+      <ul id="lista" class="lista" aria-live="polite"></ul>
+      <div id="fila-vazia" class="vazio" hidden></div>
+    </section>
 
-      <form id="form-msg">
-        <div class="linha-2">
-          <label>Morador<input id="morador" value="Ana Souza" maxlength="120" required></label>
-          <label>Apto<input id="apartamento" value="302B" maxlength="20"></label>
-        </div>
-        <label>Mensagem
-          <textarea id="texto" rows="4" maxlength="4000" required placeholder="Ex.: Tem água vazando do teto da garagem"></textarea>
+    <!-- Detalhe do chamado -->
+    <section class="detalhe" id="detalhe" aria-label="Chamado selecionado">
+      <div class="detalhe-vazio" id="detalhe-vazio">
+        <p>Escolha um chamado na fila para ver a conversa com o morador e resolver.</p>
+        <p class="dica">Ainda não tem nenhum? Clique em <strong>Simular morador</strong> e mande uma mensagem.</p>
+      </div>
+      <div id="detalhe-conteudo" hidden></div>
+    </section>
+  </div>
+
+  <!-- Simulador do morador -->
+  <dialog id="simulador" class="dlg dlg-simulador" aria-labelledby="t-sim">
+    <div class="dlg-cabeca">
+      <h2 id="t-sim">Simular mensagem de morador</h2>
+      <button class="fechar" type="button" data-fechar aria-label="Fechar">✕</button>
+    </div>
+    <p class="dica">No dia a dia, essas mensagens chegam pelo WhatsApp, Telegram ou e-mail e entram pelo webhook do n8n. Aqui você faz o papel do morador.</p>
+    <form id="form-msg" class="form">
+      <div class="linha">
+        <label>Nome<input id="morador" value="Ana Souza" maxlength="120" required></label>
+        <label class="curto">Apto<input id="apartamento" value="302B" maxlength="20"></label>
+        <label class="curto">Canal
+          <select id="canal">
+            <option value="whatsapp">WhatsApp</option>
+            <option value="telegram">Telegram</option>
+            <option value="email">E-mail</option>
+            <option value="portaria">Interfone</option>
+          </select>
         </label>
-        <div class="exemplos" aria-label="Exemplos">
-          <button type="button" class="chip" data-txt="Socorro, tem cheiro de gás forte no corredor do 3º andar!">🔴 Cheiro de gás</button>
-          <button type="button" class="chip" data-txt="Tem água vazando do teto da garagem, perto da vaga 12">🟠 Vazamento</button>
-          <button type="button" class="chip" data-txt="O vizinho do 402 está com som altíssimo de novo, já passou da meia-noite!!">🟡 Barulho</button>
-          <button type="button" class="chip" data-txt="Que horas abre a piscina?">⚡ Piscina (FAQ)</button>
-          <button type="button" class="chip" data-txt="Posso fazer mudança no domingo?">⚡ Mudança (FAQ)</button>
-          <button type="button" class="chip" data-txt="Meu boleto veio com valor errado, cobraram a taxa do salão duas vezes">💰 Cobrança</button>
-        </div>
-        <button id="btn-enviar" class="btn-primario" type="submit">Enviar mensagem</button>
-        <p id="dica-modo" class="dica">A mensagem passa pelo webhook do n8n, que chama a API e decide o encaminhamento.</p>
-      </form>
-
-      <div id="resultado" class="resultado" hidden aria-live="polite"></div>
-    </section>
-
-    <!-- Coluna direita: painel do síndico -->
-    <section class="painel" aria-labelledby="t-painel">
-      <h2 id="t-painel" class="sr-only">Painel do síndico</h2>
-
-      <div class="metricas">
-        <div class="metrica"><span class="m-rotulo">Chamados</span><strong id="m-total">–</strong></div>
-        <div class="metrica destaque-critico"><span class="m-rotulo">Críticos abertos</span><strong id="m-criticos">–</strong></div>
-        <div class="metrica"><span class="m-rotulo">Em aberto</span><strong id="m-abertos">–</strong></div>
-        <div class="metrica destaque-economia"><span class="m-rotulo">Respondidos sem IA</span><strong id="m-economia">–</strong><small id="m-economia-det"></small></div>
       </div>
-
-      <div class="cartao">
-        <div class="cartao-topo">
-          <h2>Chamados</h2>
-          <div class="filtros">
-            <select id="f-status" aria-label="Filtrar por status">
-              <option value="">Todos os status</option>
-              <option value="aberto">Abertos</option>
-              <option value="em_andamento">Em andamento</option>
-              <option value="resolvido">Resolvidos</option>
-            </select>
-            <select id="f-prioridade" aria-label="Filtrar por prioridade">
-              <option value="">Todas as prioridades</option>
-              <option value="critica">Crítica</option>
-              <option value="alta">Alta</option>
-              <option value="media">Média</option>
-              <option value="baixa">Baixa</option>
-            </select>
-            <button id="btn-atualizar" class="btn-icone" type="button" title="Atualizar" aria-label="Atualizar">↻</button>
-          </div>
-        </div>
-        <ul id="lista" class="lista"></ul>
-        <p id="vazio" class="vazio" hidden>Nenhum chamado ainda. Envie uma mensagem ao lado para começar.</p>
+      <label>Mensagem
+        <textarea id="texto" rows="3" maxlength="4000" required placeholder="Escreva como um morador escreveria"></textarea>
+      </label>
+      <div class="exemplos" aria-label="Mensagens de exemplo">
+        <button type="button" class="chip" data-txt="Socorro, tem cheiro de gás forte no corredor do 3º andar!">Cheiro de gás</button>
+        <button type="button" class="chip" data-txt="Tem água vazando do teto da garagem, perto da vaga 12">Vazamento na garagem</button>
+        <button type="button" class="chip" data-txt="O vizinho do 402 está com som altíssimo de novo, já passou da meia-noite!!">Barulho</button>
+        <button type="button" class="chip" data-txt="Meu boleto veio com valor errado, cobraram a taxa do salão duas vezes">Cobrança errada</button>
+        <button type="button" class="chip" data-txt="O elevador social está parado no 5º andar desde cedo">Elevador parado</button>
+        <button type="button" class="chip chip-faq" data-txt="Que horas abre a piscina?">Horário da piscina</button>
+        <button type="button" class="chip chip-faq" data-txt="Posso fazer mudança no domingo?">Mudança no domingo</button>
       </div>
+      <fieldset class="rota">
+        <legend>Caminho da mensagem</legend>
+        <label class="radio"><input type="radio" name="modo" value="n8n" checked> Pelo n8n (fluxo completo)</label>
+        <label class="radio"><input type="radio" name="modo" value="api"> Direto na API</label>
+        <button type="button" class="link" id="trocar-url">Endereço do n8n</button>
+      </fieldset>
+      <button id="btn-enviar" class="btn btn-verde" type="submit">Enviar mensagem</button>
+    </form>
+    <div id="sim-resultado" class="sim-resultado" hidden aria-live="polite"></div>
+  </dialog>
 
-      <div class="cartao">
-        <div class="cartao-topo">
-          <h2>Resumo do dia</h2>
-          <button id="btn-resumo" class="btn-secundario" type="button">Gerar com IA</button>
-        </div>
-        <div id="resumo" class="resumo"><p class="dica">Gera o relatório que o n8n envia ao síndico todo dia às 18h.</p></div>
+  <!-- Resolver -->
+  <dialog id="dlg-resolver" class="dlg" aria-labelledby="t-resolver">
+    <form method="dialog" class="form" id="form-resolver">
+      <div class="dlg-cabeca">
+        <h2 id="t-resolver">Resolver chamado</h2>
+        <button class="fechar" type="button" data-fechar aria-label="Fechar">✕</button>
       </div>
-    </section>
-  </main>
-
-  <dialog id="config-n8n">
-    <form method="dialog">
-      <h3>Endereço do webhook do n8n</h3>
-      <input id="url-n8n" type="url">
-      <menu><button value="cancel">Cancelar</button><button value="ok" class="btn-primario">Salvar</button></menu>
+      <label>O que foi feito?
+        <textarea id="nota-resolucao" rows="3" required maxlength="1000" placeholder="Ex.: Cano trocado pelo encanador, garagem seca."></textarea>
+      </label>
+      <div class="exemplos" id="notas-prontas"></div>
+      <label class="radio"><input type="checkbox" id="avisar-morador" checked> Avisar o morador que foi resolvido</label>
+      <div class="dlg-acoes">
+        <button type="button" class="btn btn-contorno" data-fechar>Cancelar</button>
+        <button type="submit" class="btn btn-verde" value="ok">Marcar como resolvido</button>
+      </div>
     </form>
   </dialog>
+
+  <!-- Encaminhar / prioridade -->
+  <dialog id="dlg-mudar" class="dlg" aria-labelledby="t-mudar">
+    <form method="dialog" class="form" id="form-mudar">
+      <div class="dlg-cabeca">
+        <h2 id="t-mudar">Encaminhar</h2>
+        <button class="fechar" type="button" data-fechar aria-label="Fechar">✕</button>
+      </div>
+      <div id="opcoes-mudar" class="opcoes" role="radiogroup"></div>
+      <label>Motivo (opcional)<input id="motivo-mudar" maxlength="500"></label>
+      <div class="dlg-acoes">
+        <button type="button" class="btn btn-contorno" data-fechar>Cancelar</button>
+        <button type="submit" class="btn btn-verde" value="ok" id="btn-mudar">Encaminhar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Resumo do dia -->
+  <dialog id="dlg-resumo" class="dlg" aria-labelledby="t-resumo">
+    <div class="dlg-cabeca">
+      <h2 id="t-resumo">Resumo do dia</h2>
+      <button class="fechar" type="button" data-fechar aria-label="Fechar">✕</button>
+    </div>
+    <p class="dica">O mesmo relatório que o n8n envia ao síndico todo dia às 18h.</p>
+    <div id="resumo-conteudo"></div>
+  </dialog>
+
+  <!-- Endereço do n8n -->
+  <dialog id="dlg-n8n" class="dlg" aria-labelledby="t-n8n">
+    <form method="dialog" class="form">
+      <h2 id="t-n8n">Endereço do webhook do n8n</h2>
+      <input id="url-n8n" type="url" required>
+      <p class="dica">O fluxo "1. Atendimento de mensagens" precisa estar publicado.</p>
+      <div class="dlg-acoes">
+        <button type="button" class="btn btn-contorno" data-fechar>Cancelar</button>
+        <button type="submit" class="btn btn-verde" value="ok">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="aviso" class="aviso" role="status" hidden></div>
 
   <script src="app.js"></script>
 </body>

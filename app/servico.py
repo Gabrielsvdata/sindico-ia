@@ -4,9 +4,21 @@ A IA interpreta a mensagem; a DECISÃO de ação é feita aqui, em código, de f
 """
 
 from . import config, db
-from .ai import analisar_mensagem, normalizar
+from .ai import analisar_mensagem, modelo_usado, normalizar
 from .faq import analise_da_faq, buscar_faq, chave_cache
 from .schemas import AnaliseIA, Chamado, MensagemEntrada
+
+ROTULO_PRIORIDADE = {"baixa": "Baixa", "media": "Média", "alta": "Alta", "critica": "Crítica"}
+ROTULO_SETOR = {"zeladoria": "Zeladoria", "portaria": "Portaria", "administracao": "Administração", "sindico": "Síndico"}
+ROTULO_CATEGORIA = {
+    "manutencao": "manutenção", "barulho": "barulho", "duvida": "dúvida", "encomenda": "encomenda",
+    "financeiro": "financeiro", "seguranca": "segurança", "reclamacao": "reclamação", "outros": "outros",
+}
+ROTULO_ORIGEM = {"faq": "perguntas frequentes (sem IA)", "cache": "resposta já dada antes (sem IA)", "ia": "IA"}
+
+
+class ErroRegra(Exception):
+    """Ação não permitida no estado atual do chamado."""
 
 # Guarda-corpo: se a mensagem tiver estes termos, é emergência mesmo que a IA erre.
 PALAVRAS_EMERGENCIA = (
@@ -38,8 +50,8 @@ def montar_notificacao(chamado: Chamado) -> str:
     a = chamado.analise
     apto = f" (apto {chamado.apartamento})" if chamado.apartamento else ""
     linhas = [
-        f"{EMOJI_PRIORIDADE[a.prioridade]} Chamado #{chamado.id} — prioridade {a.prioridade.upper()}",
-        f"Setor: {a.setor} | Categoria: {a.categoria}",
+        f"{EMOJI_PRIORIDADE[chamado.prioridade]} Chamado #{chamado.id} — prioridade {chamado.prioridade.upper()}",
+        f"Setor: {chamado.setor} | Categoria: {a.categoria}",
         f"Morador: {chamado.morador}{apto}",
         f"Resumo: {a.resumo}",
     ]
@@ -86,6 +98,7 @@ def processar_mensagem(msg: MensagemEntrada) -> dict:
         regra_seguranca=regra,
         origem=origem,
     )
+    registrar_historico_inicial(chamado, origem, modelo_usado.get() if origem == "ia" else "")
     return {
         **chamado.model_dump(mode="json"),
         # Campos "achatados" para facilitar o uso no n8n
@@ -96,3 +109,102 @@ def processar_mensagem(msg: MensagemEntrada) -> dict:
         "origem": origem,
         "notificacao_setor": montar_notificacao(chamado),
     }
+
+
+# ---------------------------------------------------------------- Histórico
+
+def registrar_historico_inicial(chamado: Chamado, origem: str, modelo: str) -> None:
+    """Grava a conversa: o que chegou, o que foi entendido, o que foi respondido e quem foi avisado."""
+    a = chamado.analise
+    apto = f" (apto {chamado.apartamento})" if chamado.apartamento else ""
+    db.registrar_evento(chamado.id, "mensagem_morador", f"{chamado.morador}{apto}", chamado.texto,
+                        dados={"canal": chamado.canal})
+
+    fonte = ROTULO_ORIGEM[origem] + (f" (modelo {modelo})" if modelo else "")
+    db.registrar_evento(
+        chamado.id, "analise", "Síndico IA",
+        f"Classificado como {ROTULO_CATEGORIA[a.categoria]}, prioridade {ROTULO_PRIORIDADE[a.prioridade].lower()}, "
+        f"para {ROTULO_SETOR[a.setor]}.",
+        dados={
+            "origem": origem, "fonte": fonte, "modelo": modelo or None, "confianca": a.confianca,
+            "sentimento": a.sentimento, "trecho_regimento": a.trecho_regimento,
+            "guarda_corpo": chamado.regra_seguranca_aplicada, "resumo": a.resumo,
+            "transcricao_anexo": a.transcricao_anexo,
+        },
+    )
+    db.registrar_evento(chamado.id, "resposta_morador", "Síndico IA (automática)", a.resposta_morador,
+                        destino=chamado.morador)
+
+    if chamado.acao == "responder_automaticamente":
+        db.registrar_evento(chamado.id, "status", "Síndico IA", "Encerrado: dúvida respondida com o regimento.",
+                            dados={"de": "aberto", "para": "resolvido"})
+        return
+
+    destinos = [ROTULO_SETOR[a.setor]]
+    if chamado.acao == "emergencia":
+        destinos = ["Portaria", "Zelador de plantão", "Síndico"]
+    for destino in destinos:
+        db.registrar_evento(chamado.id, "alerta_setor", "n8n", montar_notificacao(chamado), destino=destino)
+
+
+# ---------------------------------------------------------------- Ações da equipe
+
+def _obter(chamado_id: int) -> Chamado:
+    chamado = db.buscar(chamado_id)
+    if not chamado:
+        raise LookupError("Chamado não encontrado")
+    return chamado
+
+
+def mudar_status(chamado_id: int, status: str, autor: str | None, nota: str | None) -> Chamado:
+    atual = _obter(chamado_id)
+    if atual.status == status:
+        raise ErroRegra(f"O chamado já está {status.replace('_', ' ')}.")
+    if status == "resolvido" and not (nota and nota.strip()):
+        raise ErroRegra("Descreva o que foi feito para resolver o chamado.")
+
+    autor = autor or "Equipe"
+    textos = {
+        "em_andamento": f"{autor} assumiu o chamado." if atual.status == "aberto" else f"{autor} reabriu o chamado.",
+        "resolvido": f"Resolvido por {autor}.",
+        "aberto": f"{autor} reabriu o chamado.",
+    }
+    chamado = db.atualizar_status(chamado_id, status, autor)
+    db.registrar_evento(chamado_id, "status", autor, textos[status] + (f" {nota.strip()}" if nota else ""),
+                        dados={"de": atual.status, "para": status, "nota": nota})
+    return chamado
+
+
+def registrar_interacao(chamado_id: int, tipo: str, autor: str, texto: str) -> Chamado:
+    chamado = _obter(chamado_id)
+    destino = chamado.morador if tipo == "resposta_morador" else None
+    db.registrar_evento(chamado_id, tipo, autor, texto.strip(), destino=destino)
+    # Morador voltou a escrever num chamado encerrado: reabre
+    if tipo == "mensagem_morador" and chamado.status == "resolvido":
+        db.atualizar_status(chamado_id, "aberto", None)
+        db.registrar_evento(chamado_id, "status", "Síndico IA", "Reaberto: o morador enviou uma nova mensagem.",
+                            dados={"de": "resolvido", "para": "aberto"})
+    return _obter(chamado_id)
+
+
+def encaminhar(chamado_id: int, setor: str, autor: str, motivo: str | None) -> Chamado:
+    atual = _obter(chamado_id)
+    if atual.setor == setor:
+        raise ErroRegra(f"O chamado já está com {ROTULO_SETOR[setor]}.")
+    chamado = db.atualizar_campo(chamado_id, "setor", setor)
+    texto = f"Encaminhado de {ROTULO_SETOR[atual.setor]} para {ROTULO_SETOR[setor]}."
+    db.registrar_evento(chamado_id, "encaminhamento", autor, texto + (f" Motivo: {motivo.strip()}" if motivo else ""),
+                        destino=ROTULO_SETOR[setor], dados={"de": atual.setor, "para": setor})
+    db.registrar_evento(chamado_id, "alerta_setor", "n8n", montar_notificacao(chamado), destino=ROTULO_SETOR[setor])
+    return chamado
+
+
+def mudar_prioridade(chamado_id: int, prioridade: str, autor: str, motivo: str | None) -> Chamado:
+    atual = _obter(chamado_id)
+    if atual.prioridade == prioridade:
+        raise ErroRegra("O chamado já tem essa prioridade.")
+    chamado = db.atualizar_campo(chamado_id, "prioridade", prioridade)
+    texto = f"Prioridade alterada de {ROTULO_PRIORIDADE[atual.prioridade]} para {ROTULO_PRIORIDADE[prioridade]}."
+    db.registrar_evento(chamado_id, "prioridade", autor, texto + (f" Motivo: {motivo.strip()}" if motivo else ""),
+                        dados={"de": atual.prioridade, "para": prioridade})
+    return chamado

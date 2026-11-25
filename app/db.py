@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import config
-from .schemas import AnaliseIA, Chamado
+from .schemas import AnaliseIA, Chamado, Evento
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS chamados (
@@ -24,8 +24,21 @@ CREATE TABLE IF NOT EXISTS chamados (
     responsavel TEXT,
     regra_seguranca INTEGER NOT NULL DEFAULT 0,
     analise_json TEXT NOT NULL,
-    origem TEXT NOT NULL DEFAULT 'ia'
+    origem TEXT NOT NULL DEFAULT 'ia',
+    resolvido_em TEXT
 );
+
+CREATE TABLE IF NOT EXISTS eventos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chamado_id INTEGER NOT NULL REFERENCES chamados(id),
+    criado_em TEXT NOT NULL,
+    tipo TEXT NOT NULL,
+    autor TEXT NOT NULL,
+    destino TEXT,
+    texto TEXT NOT NULL,
+    dados_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_eventos_chamado ON eventos (chamado_id, id);
 
 CREATE TABLE IF NOT EXISTS cache_respostas (
     chave TEXT PRIMARY KEY,
@@ -34,6 +47,14 @@ CREATE TABLE IF NOT EXISTS cache_respostas (
     usos INTEGER NOT NULL DEFAULT 0
 );
 """
+
+# Prazo de atendimento por prioridade
+PRAZOS = {
+    "critica": timedelta(minutes=30),
+    "alta": timedelta(hours=4),
+    "media": timedelta(hours=24),
+    "baixa": timedelta(hours=72),
+}
 
 
 @contextmanager
@@ -51,10 +72,12 @@ def conexao():
 def iniciar():
     with conexao() as con:
         con.executescript(SCHEMA)
-        # Bancos criados antes da coluna "origem" existir
+        # Bancos criados por versões anteriores do projeto
         colunas = {r["name"] for r in con.execute("PRAGMA table_info(chamados)")}
         if "origem" not in colunas:
             con.execute("ALTER TABLE chamados ADD COLUMN origem TEXT NOT NULL DEFAULT 'ia'")
+        if "resolvido_em" not in colunas:
+            con.execute("ALTER TABLE chamados ADD COLUMN resolvido_em TEXT")
 
 
 def agora() -> datetime:
@@ -62,9 +85,12 @@ def agora() -> datetime:
 
 
 def _para_chamado(row: sqlite3.Row) -> Chamado:
+    criado = datetime.fromisoformat(row["criado_em"])
+    prazo = criado + PRAZOS[row["prioridade"]]
     return Chamado(
         id=row["id"],
-        criado_em=datetime.fromisoformat(row["criado_em"]),
+        criado_em=criado,
+        atualizado_em=datetime.fromisoformat(row["atualizado_em"]),
         morador=row["morador"],
         apartamento=row["apartamento"],
         canal=row["canal"],
@@ -74,6 +100,25 @@ def _para_chamado(row: sqlite3.Row) -> Chamado:
         analise=AnaliseIA.model_validate_json(row["analise_json"]),
         regra_seguranca_aplicada=bool(row["regra_seguranca"]),
         origem=row["origem"],
+        setor=row["setor"],
+        prioridade=row["prioridade"],
+        responsavel=row["responsavel"],
+        resolvido_em=datetime.fromisoformat(row["resolvido_em"]) if row["resolvido_em"] else None,
+        prazo_em=prazo,
+        atrasado=row["status"] != "resolvido" and agora() > prazo,
+    )
+
+
+def _para_evento(row: sqlite3.Row) -> Evento:
+    return Evento(
+        id=row["id"],
+        chamado_id=row["chamado_id"],
+        criado_em=datetime.fromisoformat(row["criado_em"]),
+        tipo=row["tipo"],
+        autor=row["autor"],
+        destino=row["destino"],
+        texto=row["texto"],
+        dados=json.loads(row["dados_json"] or "{}"),
     )
 
 
@@ -83,14 +128,32 @@ def criar_chamado(*, morador, apartamento, canal, texto, acao, status, analise: 
     with conexao() as con:
         cur = con.execute(
             """INSERT INTO chamados (criado_em, atualizado_em, morador, apartamento, canal, texto, acao, status,
-                                     categoria, prioridade, setor, regra_seguranca, analise_json, origem)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                     categoria, prioridade, setor, regra_seguranca, analise_json, origem, resolvido_em)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (ts, ts, morador, apartamento, canal, texto, acao, status,
              analise.categoria, analise.prioridade, analise.setor, int(regra_seguranca), analise.model_dump_json(),
-             origem),
+             origem, ts if status == "resolvido" else None),
         )
         row = con.execute("SELECT * FROM chamados WHERE id = ?", (cur.lastrowid,)).fetchone()
     return _para_chamado(row)
+
+
+def registrar_evento(chamado_id: int, tipo: str, autor: str, texto: str, destino: str | None = None,
+                     dados: dict | None = None) -> Evento:
+    with conexao() as con:
+        cur = con.execute(
+            "INSERT INTO eventos (chamado_id, criado_em, tipo, autor, destino, texto, dados_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (chamado_id, agora().isoformat(), tipo, autor, destino, texto, json.dumps(dados or {}, ensure_ascii=False)),
+        )
+        con.execute("UPDATE chamados SET atualizado_em = ? WHERE id = ?", (agora().isoformat(), chamado_id))
+        row = con.execute("SELECT * FROM eventos WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return _para_evento(row)
+
+
+def listar_eventos(chamado_id: int) -> list[Evento]:
+    with conexao() as con:
+        rows = con.execute("SELECT * FROM eventos WHERE chamado_id = ? ORDER BY id", (chamado_id,)).fetchall()
+    return [_para_evento(r) for r in rows]
 
 
 def buscar(chamado_id: int) -> Chamado | None:
@@ -99,14 +162,13 @@ def buscar(chamado_id: int) -> Chamado | None:
     return _para_chamado(row) if row else None
 
 
-def listar(status: str | None = None, prioridade: str | None = None, limite: int = 100) -> list[Chamado]:
+def listar(status: str | None = None, prioridade: str | None = None, setor: str | None = None,
+           limite: int = 100) -> list[Chamado]:
     sql, args = "SELECT * FROM chamados WHERE 1=1", []
-    if status:
-        sql += " AND status = ?"
-        args.append(status)
-    if prioridade:
-        sql += " AND prioridade = ?"
-        args.append(prioridade)
+    for coluna, valor in (("status", status), ("prioridade", prioridade), ("setor", setor)):
+        if valor:
+            sql += f" AND {coluna} = ?"
+            args.append(valor)
     sql += " ORDER BY id DESC LIMIT ?"
     args.append(limite)
     with conexao() as con:
@@ -114,11 +176,22 @@ def listar(status: str | None = None, prioridade: str | None = None, limite: int
 
 
 def atualizar_status(chamado_id: int, status: str, responsavel: str | None) -> Chamado | None:
+    ts = agora().isoformat()
     with conexao() as con:
         con.execute(
-            "UPDATE chamados SET status = ?, responsavel = COALESCE(?, responsavel), atualizado_em = ? WHERE id = ?",
-            (status, responsavel, agora().isoformat(), chamado_id),
+            """UPDATE chamados SET status = ?, responsavel = COALESCE(?, responsavel), atualizado_em = ?,
+                      resolvido_em = CASE WHEN ? = 'resolvido' THEN ? ELSE NULL END
+               WHERE id = ?""",
+            (status, responsavel, ts, status, ts, chamado_id),
         )
+    return buscar(chamado_id)
+
+
+def atualizar_campo(chamado_id: int, coluna: str, valor: str) -> Chamado | None:
+    assert coluna in ("setor", "prioridade")
+    with conexao() as con:
+        con.execute(f"UPDATE chamados SET {coluna} = ?, atualizado_em = ? WHERE id = ?",
+                    (valor, agora().isoformat(), chamado_id))
     return buscar(chamado_id)
 
 
@@ -161,12 +234,34 @@ def salvar_cache(chave: str, analise: AnaliseIA) -> None:
         )
 
 
+def caixas() -> dict:
+    """O que cada setor tem para atender agora."""
+    pendentes = [c for c in listar(limite=10_000) if c.status != "resolvido"]
+    resultado = {}
+    for setor in ("portaria", "zeladoria", "administracao", "sindico"):
+        do_setor = [c for c in pendentes if c.setor == setor]
+        resultado[setor] = {
+            "pendentes": len(do_setor),
+            "abertos": sum(c.status == "aberto" for c in do_setor),
+            "em_andamento": sum(c.status == "em_andamento" for c in do_setor),
+            "atrasados": sum(c.atrasado for c in do_setor),
+            "criticos": sum(c.prioridade == "critica" for c in do_setor),
+        }
+    return resultado
+
+
 def metricas() -> dict:
     with conexao() as con:
         total = con.execute("SELECT COUNT(*) FROM chamados").fetchone()[0]
 
         def agrupar(coluna: str) -> dict:
             return {r[0]: r[1] for r in con.execute(f"SELECT {coluna}, COUNT(*) FROM chamados GROUP BY {coluna}")}
+
+        # Tempo médio entre abertura e resolução, só dos chamados resolvidos pela equipe
+        minutos = con.execute(
+            """SELECT AVG((julianday(resolvido_em) - julianday(criado_em)) * 1440) FROM chamados
+               WHERE resolvido_em IS NOT NULL AND acao != 'responder_automaticamente'"""
+        ).fetchone()[0]
 
         return {
             "total": total,
@@ -176,4 +271,6 @@ def metricas() -> dict:
             "por_status": agrupar("status"),
             "por_acao": agrupar("acao"),
             "por_origem": agrupar("origem"),
+            "atrasados": sum(c.atrasado for c in listar(limite=10_000)),
+            "tempo_medio_resolucao_min": round(minutos, 1) if minutos is not None else None,
         }

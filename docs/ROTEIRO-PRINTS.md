@@ -20,7 +20,7 @@ Antes de começar: `docker compose up -d`, importe os fluxos, **ative/publique**
 | 12 | `12-resultado-chamado.png` | Saída da mensagem "vazamento na garagem" | idem |
 | 13 | `13-resultado-regimento.png` | Saída de "mudança no domingo" mostrando `trecho_regimento` | idem |
 | 14 | `14-resultado-resumo.png` | Fluxo 3 executado (botão **Execute workflow**) com o relatório | Fluxo 3 → Execute |
-| 15 | `15-painel.png` | Painel com vários chamados de prioridades diferentes e o resultado da última mensagem | http://localhost:8000 (envie os exemplos pelos botões, no modo "via n8n") |
+| 15 | `15-painel.png` | Central com a fila cheia e um chamado aberto mostrando a conversa (mensagem, análise, avisos e ações da equipe) | http://localhost:8000 (use **Simular morador** pelo n8n, depois assuma, responda e resolva um chamado) |
 | 16 | `16-metricas.png` | JSON de métricas mostrando `por_origem` e `chamadas_ia_economizadas` | http://localhost:8000/metricas |
 
 **Dicas**

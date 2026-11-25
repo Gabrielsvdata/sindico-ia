@@ -128,20 +128,36 @@ A API monta o prompt (`app/prompts.py`) com as **regras de classificação**, o 
 | `2-escalonamento.json` | A cada 10 min (ou manual) | Busca chamados críticos abertos há mais de 30 min → alerta o síndico |
 | `3-resumo-diario.json` | Todo dia às 18h (ou manual) | Pede à IA o resumo do dia → monta o relatório do síndico |
 
-### 5.4 Painel web
+### 5.4 Central de atendimento (painel web)
 
-Em **http://localhost:8000** fica o painel do Síndico IA, servido pela própria API. Não precisa de build nem de outro servidor.
+Em **http://localhost:8000** fica a central de atendimento do síndico e da equipe, servida pela própria API (HTML, CSS e JavaScript puros, sem build).
 
-| Área | O que faz |
+**De onde vêm as conversas.** No dia a dia, o morador escreve pelo WhatsApp, Telegram, e-mail ou interfone, e a mensagem entra pelo **webhook do n8n**, que chama a API. Para demonstrar, o botão **Simular morador** faz esse papel: escolhe o canal e envia pelo n8n (fluxo completo) ou direto na API.
+
+**Como a central é organizada:**
+
+| Área | O que mostra |
 |---|---|
-| **Mensagem do morador** | Simula o morador. Envia **pelo webhook do n8n** (fluxo completo) ou direto na API, e mostra a ação, a prioridade, o setor, a origem (FAQ/cache/IA), a resposta ao morador, o trecho do regimento e o tempo de resposta |
-| **Métricas** | Total de chamados, críticos abertos, chamados em aberto e o **percentual respondido sem IA** |
-| **Chamados** | Lista em tempo real (atualiza a cada 8 s), com filtros por status e prioridade e botões **Assumir** e **Resolver** |
-| **Resumo do dia** | Gera com IA o mesmo relatório que o n8n envia ao síndico às 18h |
+| **Caixas por setor** | Portaria, Zeladoria, Administração e Síndico, cada um com os chamados pendentes e quantos estão fora do prazo |
+| **Fila** | Chamados pendentes ordenados por urgência: primeiro os fora do prazo, depois por prioridade, depois o mais antigo |
+| **Conversa** | Tudo o que aconteceu no chamado, em ordem: a mensagem do morador, a análise da IA, a resposta automática, os avisos que o n8n mandou para cada setor e cada ação da equipe |
+| **De onde veio** | Como a mensagem chegou (canal), quem analisou (IA com modelo e confiança, FAQ ou cache) e qual trecho do regimento embasou a resposta |
 
-Tem tema claro e escuro (segue o sistema) e funciona no celular.
+**Formas de resolução** (tudo fica registrado na conversa, com autor e horário):
 
-![Painel do Síndico IA](docs/prints/15-painel.png)
+| Ação | O que faz |
+|---|---|
+| **Assumir** | Marca o chamado como em andamento, com o nome de quem assumiu |
+| **Responder ao morador** | Envia uma mensagem ao morador, com respostas prontas por assunto |
+| **Nota interna** | Anotação só para a equipe |
+| **Encaminhar** | Passa para outro setor, que recebe um novo aviso. A sugestão original da IA continua registrada |
+| **Mudar prioridade** | Corrige a prioridade da IA, e o prazo é recalculado |
+| **Resolver** | Exige descrever o que foi feito e pode avisar o morador |
+| **Reabrir** | Volta o chamado para atendimento. Se o morador responder um chamado resolvido, ele reabre sozinho |
+
+**Prazos por prioridade:** crítica 30 min, alta 4 h, média 24 h, baixa 72 h. O seletor **Você é** (Síndico, Zelador, Portaria, Administração) define quem assina cada ação.
+
+![Central de atendimento](docs/prints/15-painel.png)
 
 ### 5.5 Endpoints da API
 
@@ -149,9 +165,14 @@ Tem tema claro e escuro (segue o sistema) e funciona no celular.
 |---|---|---|
 | `GET` | `/health` | Status, provedor de IA e versão do prompt |
 | `POST` | `/mensagens` | Analisa uma mensagem e cria o chamado |
-| `GET` | `/chamados` | Lista chamados (filtros: `status`, `prioridade`) |
+| `GET` | `/chamados` | Lista chamados (filtros: `status`, `prioridade`, `setor`) |
 | `GET` | `/chamados/{id}` | Detalhe de um chamado |
-| `PATCH` | `/chamados/{id}` | Atualiza o status (`aberto`, `em_andamento`, `resolvido`) |
+| `GET` | `/chamados/{id}/eventos` | Histórico completo: mensagem, análise, respostas, avisos e ações |
+| `PATCH` | `/chamados/{id}` | Assumir, resolver (exige `nota` com o que foi feito) ou reabrir |
+| `POST` | `/chamados/{id}/interacoes` | Resposta ao morador, nota interna ou nova mensagem do morador |
+| `POST` | `/chamados/{id}/encaminhar` | Passa para outro setor e avisa o novo setor |
+| `POST` | `/chamados/{id}/prioridade` | Corrige a prioridade e recalcula o prazo |
+| `GET` | `/caixas` | Pendentes, fora do prazo e críticos de cada setor |
 | `GET` | `/chamados/criticos-parados?minutos=30` | Usado no escalonamento |
 | `GET` | `/resumo-diario` | Resumo do dia gerado pela IA |
 | `GET` | `/metricas` | Contagem por categoria, prioridade, setor, status, ação e origem, além das chamadas de IA economizadas |
@@ -210,7 +231,14 @@ Em outro terminal, rode o n8n com `npx n8n`, importe os fluxos e **troque a URL 
 pytest -q
 ```
 
-Os testes usam o provedor `mock` e não gastam a cota da IA. Eles cobrem: emergência, resposta pelo regimento, abertura de chamado, guarda-corpo de segurança, nova tentativa com JSON inválido, sobrecarga do Gemini e modelo reserva, FAQ, cache, escalonamento, resumo e métricas.
+Os testes usam o provedor `mock` e não gastam a cota da IA. Também cobrem o histórico da conversa e todas as ações de resolução. Eles cobrem: emergência, resposta pelo regimento, abertura de chamado, guarda-corpo de segurança, nova tentativa com JSON inválido, sobrecarga do Gemini e modelo reserva, FAQ, cache, escalonamento, resumo e métricas.
+
+**Teste da central no navegador** (opcional, precisa de Node.js): com a API e o n8n rodando, o script abaixo simula moradores por vários canais, resolve chamados como a equipe e testa a versão de celular, salvando prints no caminho:
+
+```bash
+npm install playwright && npx playwright install chromium
+node tests/e2e/testar_painel.js docs/prints/e2e
+```
 
 ### Sem chave de IA?
 Defina `AI_PROVIDER=mock` no `.env`. O sistema passa a funcionar com regras por palavra-chave, o que é útil para testar o fluxo do n8n.
@@ -266,14 +294,14 @@ sindico-ia/
 │   ├── prompts.py       # Prompts estruturados (versionados)
 │   ├── schemas.py       # Modelos Pydantic (entrada, análise da IA, chamado)
 │   ├── db.py            # Persistência em SQLite
-│   ├── static/          # Painel web (HTML, CSS e JS puros)
+│   ├── static/          # Central de atendimento (HTML, CSS e JS puros)
 │   └── config.py        # Variáveis de ambiente
 ├── data/regimento.md    # Base de conhecimento usada pela IA
 ├── data/faq.json        # Perguntas frequentes respondidas sem IA
 ├── n8n/                 # Fluxos exportados (JSON)
 ├── exemplos/            # Mensagens de exemplo + script de teste
 ├── docs/prints/         # Capturas de tela do n8n
-├── tests/               # Testes automatizados (pytest)
+├── tests/               # Testes da API (pytest) e da central no navegador (tests/e2e)
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example
