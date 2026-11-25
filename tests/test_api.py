@@ -131,7 +131,7 @@ def test_usa_modelo_reserva(monkeypatch):
     monkeypatch.setattr(ai.time, "sleep", lambda s: None)
     monkeypatch.setattr(ai.httpx, "post", post)
     ai._chamar_gemini("sys", [{"text": "oi"}])
-    assert usados == ["principal", "principal", "principal", "reserva"]
+    assert usados == ["principal"] * config.AI_TENTATIVAS_SOBRECARGA + ["reserva"]
 
 
 def test_erro_definitivo_nao_repete(monkeypatch):
@@ -141,3 +141,19 @@ def test_erro_definitivo_nao_repete(monkeypatch):
     with pytest.raises(ai.ErroIA, match="400"):
         ai._chamar_gemini("sys", [{"text": "oi"}])
     assert len(chamadas) == 1
+
+
+def test_timeout_passa_para_modelo_reserva(monkeypatch):
+    ok = {"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}
+
+    def post(url, **k):
+        if "reserva" in url:
+            return RespostaFalsa(200, ok)
+        raise ai.httpx.ReadTimeout("timed out")
+
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "teste")
+    monkeypatch.setattr(config, "GEMINI_MODEL", "principal")
+    monkeypatch.setattr(config, "GEMINI_MODELOS_RESERVA", ["reserva"])
+    monkeypatch.setattr(ai.time, "sleep", lambda s: None)
+    monkeypatch.setattr(ai.httpx, "post", post)
+    assert ai._chamar_gemini("sys", [{"text": "oi"}]) == "{}"

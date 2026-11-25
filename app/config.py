@@ -13,5 +13,7 @@ REGIMENTO_PATH = Path(os.getenv("REGIMENTO_PATH", str(BASE_DIR / "data" / "regim
 
 # Quantas vezes pedir de novo à IA quando ela devolve um JSON inválido
 AI_MAX_TENTATIVAS = int(os.getenv("AI_MAX_TENTATIVAS", "3"))
-# Quantas vezes repetir a chamada quando o Google responde 429/500/503 (esperando 2s, 4s, 8s...)
-AI_TENTATIVAS_SOBRECARGA = int(os.getenv("AI_TENTATIVAS_SOBRECARGA", "3"))
+# Quantas vezes repetir a chamada quando o Google responde 429/500/503 (esperando 2s, 4s...)
+AI_TENTATIVAS_SOBRECARGA = int(os.getenv("AI_TENTATIVAS_SOBRECARGA", "2"))
+# Tempo máximo de espera por resposta do Gemini em cada tentativa
+AI_TIMEOUT_SEGUNDOS = float(os.getenv("AI_TIMEOUT_SEGUNDOS", "30"))

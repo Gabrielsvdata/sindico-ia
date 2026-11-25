@@ -20,8 +20,13 @@ from .schemas import AnaliseIA, MensagemEntrada
 log = logging.getLogger("sindico_ia.ai")
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-# Erros passageiros do Google: limite de uso (429) e sobrecarga (500, 503)
-STATUS_TEMPORARIOS = {429, 500, 503}
+# Erros passageiros do Google: limite de uso (429), sobrecarga (500, 503) e tempo esgotado (504)
+STATUS_TEMPORARIOS = {429, 500, 503, 504}
+
+
+class RespostaTimeout:
+    status_code = 504
+    text = "O Gemini demorou demais para responder (tempo esgotado)."
 
 
 class ErroIA(Exception):
@@ -58,8 +63,11 @@ def _chamar_gemini(system: str, partes: list[dict]) -> str:
                     GEMINI_URL.format(model=modelo),
                     headers={"x-goog-api-key": config.GEMINI_API_KEY},
                     json=corpo,
-                    timeout=60,
+                    timeout=config.AI_TIMEOUT_SEGUNDOS,
                 )
+            except httpx.TimeoutException:
+                # Modelo lento por sobrecarga: trata como erro passageiro (504)
+                resp = RespostaTimeout()
             except httpx.HTTPError as e:
                 raise ErroIA(f"Falha de rede ao chamar o Gemini: {e}") from e
 
