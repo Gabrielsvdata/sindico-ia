@@ -59,7 +59,19 @@ const autor = () => $("#atuando").value;
 const API_URL = (window.SINDICO_API_URL || "").replace(/\/$/, "");
 
 async function api(caminho, opcoes = {}) {
-  const r = await fetch(API_URL + caminho, { headers: { "Content-Type": "application/json" }, ...opcoes });
+  // O Render gratuito pode levar até 1 minuto para acordar: espera até 90 s antes de desistir
+  const controle = new AbortController();
+  const limite = setTimeout(() => controle.abort(), 90000);
+  let r;
+  try {
+    r = await fetch(API_URL + caminho, { headers: { "Content-Type": "application/json" }, signal: controle.signal, ...opcoes });
+  } catch (err) {
+    throw new Error(err.name === "AbortError"
+      ? "A API não respondeu em 90 segundos."
+      : `Não foi possível falar com a API${API_URL ? ` em ${API_URL}` : ""}. Ela pode estar fora do ar ou bloqueando este endereço.`);
+  } finally {
+    clearTimeout(limite);
+  }
   const corpo = await r.json().catch(() => ({}));
   if (!r.ok) {
     const d = corpo.detail;
@@ -456,14 +468,18 @@ function abrirMudar(c, campo) {
 }
 
 // ------------------------------------------------------------------ simulador do morador
-async function abrirSimulador() {
+function abrirSimulador() {
   $("#sim-resultado").hidden = true;
-  // Inclui resolvidos: se o morador responder um chamado encerrado, ele reabre
-  const recentes = await api("/chamados?limite=50").catch(() => []);
-  $("#chamado-existente").innerHTML = '<option value="">Não, é uma mensagem nova</option>' + recentes
-    .map((c) => `<option value="${c.id}">Chamado ${c.id}: ${esc(c.morador)}${c.apartamento ? ` (${esc(c.apartamento)})` : ""}, ${STATUS[c.status].toLowerCase()}</option>`).join("");
+  // Abre na hora; a lista de chamados chega em seguida (a API pode estar acordando)
   $("#simulador").showModal();
   $("#texto").focus();
+  api("/chamados?limite=50").then((recentes) => {
+    // Inclui resolvidos: se o morador responder um chamado encerrado, ele reabre
+    const escolhido = $("#chamado-existente").value;
+    $("#chamado-existente").innerHTML = '<option value="">Não, é uma mensagem nova</option>' + recentes
+      .map((c) => `<option value="${c.id}">Chamado ${c.id}: ${esc(c.morador)}${c.apartamento ? ` (${esc(c.apartamento)})` : ""}, ${STATUS[c.status].toLowerCase()}</option>`).join("");
+    $("#chamado-existente").value = escolhido;
+  }).catch(() => {});
 }
 $("#abrir-simulador").addEventListener("click", abrirSimulador);
 $$("#simulador .chip").forEach((c) => c.addEventListener("click", () => { $("#texto").value = c.dataset.txt; $("#texto").focus(); }));
@@ -481,6 +497,7 @@ $("#trocar-url").addEventListener("click", () => {
 });
 
 async function enviarPeloN8n(dados) {
+  if (!estado.urlN8n) throw new Error("A API ainda está acordando. Espere o aviso \"Online\" no topo da tela e envie de novo.");
   let r;
   try {
     r = await fetch(estado.urlN8n, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) });
@@ -568,15 +585,23 @@ $("#atuando").addEventListener("change", () => guardar.gravar("atuando", autor()
 
 async function verificarApi() {
   const el = $("#status-api");
+  const acordando = setTimeout(() => { el.textContent = "Acordando o servidor, pode levar 1 minuto"; }, 4000);
   try {
     const h = await api("/health");
+    clearTimeout(acordando);
+    const estavaFora = !el.classList.contains("ok");
     // Em produção, a API informa o endereço público do webhook do n8n
     if (!estado.urlN8n) estado.urlN8n = h.n8n_webhook_url || "http://localhost:5678/webhook/sindico";
     el.className = "conexao ok";
     el.textContent = h.provedor_ia === "mock" ? "Online, IA simulada" : `Online, ${h.modelo}`;
-  } catch {
+    el.removeAttribute("title");
+    if (estavaFora) atualizar();
+  } catch (err) {
+    clearTimeout(acordando);
     el.className = "conexao erro";
-    el.textContent = "API fora do ar";
+    el.textContent = "API fora do ar, tentando de novo";
+    el.title = err.message;
+    setTimeout(verificarApi, 15000);
   }
 }
 
