@@ -46,7 +46,7 @@ const estado = {
   selecionado: null,
   chamados: [],
   idsVistos: null,
-  urlN8n: guardar.ler("urlN8n", null),
+  urlN8n: guardar.ler("urlN8n", null) || window.SINDICO_N8N_WEBHOOK_URL || null,
   tipoComposicao: "resposta_morador",
 };
 
@@ -468,7 +468,20 @@ function abrirMudar(c, campo) {
 }
 
 // ------------------------------------------------------------------ simulador do morador
+// O Render gratuito dorme sem uso. Acordar a API e o n8n juntos, assim que a central abre,
+// faz as duas esperas correrem em paralelo enquanto a pessoa ainda escreve a mensagem.
+function acordarServicos() {
+  if (estado.urlN8n) {
+    try {
+      const base = new URL(estado.urlN8n).origin;
+      fetch(`${base}/healthz`, { mode: "no-cors", cache: "no-store" }).catch(() => {});
+    } catch { /* endereço inválido: o envio mostra o erro */ }
+  }
+  fetch(`${API_URL}/health`, { cache: "no-store" }).catch(() => {});
+}
+
 function abrirSimulador() {
+  acordarServicos();
   $("#sim-resultado").hidden = true;
   // Abre na hora; a lista de chamados chega em seguida (a API pode estar acordando)
   $("#simulador").showModal();
@@ -499,11 +512,15 @@ $("#trocar-url").addEventListener("click", () => {
 async function enviarPeloN8n(dados) {
   if (!estado.urlN8n) throw new Error("A API ainda está acordando. Espere o aviso \"Online\" no topo da tela e envie de novo.");
   let r;
+  const controle = new AbortController();
+  const limite = setTimeout(() => controle.abort(), 150000);
   try {
-    r = await fetch(estado.urlN8n, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) });
-  } catch {
+    r = await fetch(estado.urlN8n, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados), signal: controle.signal });
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("O n8n não respondeu em 2 minutos e meio. Tente de novo: os serviços já devem estar acordados.");
     throw new Error(`O n8n não respondeu em ${estado.urlN8n}. Abra o fluxo "1. Atendimento de mensagens" no n8n e clique em Publish. Para testar sem o n8n, escolha "Direto na API".`);
   }
+  clearTimeout(limite);
   const corpo = await r.json().catch(() => ({}));
   if (r.status === 404) throw new Error('O webhook do n8n não está ativo. Abra o fluxo "1. Atendimento de mensagens" e clique em Publish.');
   if (!r.ok) throw new Error(corpo.message || `O n8n respondeu com erro ${r.status}. Veja a aba Executions do n8n.`);
@@ -527,8 +544,17 @@ $("#form-msg").addEventListener("submit", async (e) => {
   btn.textContent = "Enviando…";
   res.hidden = false;
   res.innerHTML = `<div class="ev ev-morador"><span class="ev-autor">Você</span><div class="ev-balao">${esc(dados.texto)}</div></div>
-    <p class="dica">${modo === "n8n" ? "O n8n recebeu e chamou a API." : "A API recebeu."} Se precisar da IA, a resposta pode levar alguns segundos.</p>`;
+    <p class="dica" id="espera" aria-live="off">Enviando ${modo === "n8n" ? "pelo n8n" : "para a API"}…</p>`;
   const inicio = performance.now();
+  // Mostra o tempo passando, para ficar claro que está processando
+  const relogio = setInterval(() => {
+    const seg = Math.round((performance.now() - inicio) / 1000);
+    const el = $("#espera");
+    if (!el) return;
+    el.textContent = seg < 8
+      ? `Analisando a mensagem… ${seg} s`
+      : `Aguardando há ${seg} s. No plano gratuito, o servidor pode estar acordando (até 1 minuto) ou a IA pode estar lenta.`;
+  }, 1000);
   try {
     const existente = Number($("#chamado-existente").value);
     if (existente) {
@@ -554,6 +580,7 @@ $("#form-msg").addEventListener("submit", async (e) => {
   } catch (err) {
     res.innerHTML = `<div class="erro" role="alert"><strong>A mensagem não foi processada.</strong>${esc(err.message)}</div>`;
   } finally {
+    clearInterval(relogio);
     btn.disabled = false;
     btn.textContent = "Enviar mensagem";
   }
@@ -619,6 +646,7 @@ async function atualizar({ rolar = false } = {}) {
   }
 }
 
+acordarServicos();
 verificarApi();
 atualizar();
 // Mensagens que chegam pelo n8n (de qualquer canal) aparecem sozinhas

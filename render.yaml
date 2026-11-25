@@ -17,10 +17,16 @@ services:
         value: gemini
       - key: GEMINI_API_KEY
         sync: false
+      # Modelo leve como principal: classificar mensagens é simples e ele responde bem mais rápido
       - key: GEMINI_MODEL
-        value: gemini-3.8-flash
+        value: gemini-3.5-flash-lite
       - key: GEMINI_MODELOS_RESERVA
-        value: gemini-3.7-flash,gemini-3.5-flash-lite
+        value: gemini-3.7-flash,gemini-3.8-flash
+      # Se um modelo demorar ou estiver sobrecarregado, passa logo para o próximo
+      - key: AI_TIMEOUT_SEGUNDOS
+        value: "15"
+      - key: AI_TENTATIVAS_SOBRECARGA
+        value: "1"
       - key: AI_LIMITE_DIARIO
         value: "100"
       - key: N8N_WEBHOOK_URL
